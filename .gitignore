@@ -1,0 +1,26 @@
+# Maven / 编译产物
+target/
+*.class
+*.jar
+*.war
+
+# IDE
+*.iml
+.idea/
+.vscode/
+.project
+.classpath
+.settings/
+
+# 本地凭证数据库（含 AES 加密后的邮箱密码，切勿提交）
+*.mv.db
+*.trace.db
+*.mv.db.mv
+db.mv.db
+
+# 日志
+*.log
+
+# 系统文件
+.DS_Store
+Thumbs.db
