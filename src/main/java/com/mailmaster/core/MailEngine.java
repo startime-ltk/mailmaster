@@ -2,6 +2,7 @@ package com.mailmaster.core;
 
 import com.mailmaster.core.config.ProviderPresets;
 import com.mailmaster.core.crypto.AesUtil;
+import com.mailmaster.core.demo.DemoData;
 import com.mailmaster.core.model.EmailAccount;
 import com.mailmaster.core.model.EmailMessage;
 import com.mailmaster.core.service.AccountStore;
@@ -27,14 +28,55 @@ public class MailEngine {
     private final List<EmailMessage> inbox = new CopyOnWriteArrayList<>();
     private volatile Runnable onUpdate;
 
+    /**
+     * 演示模式开关：开启后用本地示例数据代替真实邮箱，全程不联网。
+     * 真实模式（false）下所有行为保持不变。
+     */
+    private volatile boolean demoMode = false;
+    private volatile boolean schedulerStarted = false;
+    private volatile List<EmailAccount> demoAccountsCache;
+
     public MailEngine(String dbPath) {
         this.store = new AccountStore(dbPath);
     }
 
     public void setOnUpdate(Runnable r) { this.onUpdate = r; }
 
+    /** 是否已录入过真实账户（UI 用它判断要不要自动进入演示模式） */
+    public boolean hasRealAccounts() {
+        try {
+            return !store.loadAll().isEmpty();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    public boolean isDemoMode() { return demoMode; }
+
+    /** 进入演示模式：清空真实邮件缓存，改用本地示例数据 */
+    public void enterDemoMode() {
+        this.demoMode = true;
+        inbox.clear();
+    }
+
+    /** 退出演示模式：回到真实邮箱（需已录入至少一个真实账户） */
+    public void exitDemoMode() { this.demoMode = false; }
+
+    /** 演示账户（懒加载 + 缓存，保证多次调用 id 稳定） */
+    private List<EmailAccount> demoAccounts() {
+        if (demoAccountsCache == null) {
+            synchronized (this) {
+                if (demoAccountsCache == null) demoAccountsCache = DemoData.accounts();
+            }
+        }
+        return demoAccountsCache;
+    }
+
     /** 启动定时拉取（秒） */
     public void startAutoRefresh(int periodSeconds) {
+        // 演示模式不联网；schedulerStarted 防止重复启动定时器
+        if (demoMode || schedulerStarted) return;
+        schedulerStarted = true;
         scheduler.scheduleWithFixedDelay(() -> {
             try {
                 refresh();
@@ -76,7 +118,10 @@ public class MailEngine {
         store.save(a);
     }
 
-    public List<EmailAccount> getAccounts() { return store.loadAll(); }
+    public List<EmailAccount> getAccounts() {
+        if (demoMode) return new ArrayList<>(demoAccounts());
+        return store.loadAll();
+    }
 
     public void removeAccount(String id) {
         store.delete(id);
@@ -85,6 +130,12 @@ public class MailEngine {
 
     /** 拉取所有账户的新邮件并合并到统一收件箱 */
     public synchronized void refresh() throws Exception {
+        if (demoMode) {
+            inbox.clear();
+            inbox.addAll(DemoData.messages(demoAccounts()));
+            if (onUpdate != null) onUpdate.run();
+            return;
+        }
         Map<String, EmailMessage> map = new LinkedHashMap<>();
         for (EmailMessage m : inbox) map.put(m.getId(), m);
         for (EmailAccount a : store.loadAll()) {
@@ -104,6 +155,10 @@ public class MailEngine {
 
     /** 统一收件箱（按时间倒序） */
     public List<EmailMessage> getInbox() {
+        // 演示模式下无需刷新，首次取件时直接铺满示例邮件
+        if (demoMode && inbox.isEmpty()) {
+            inbox.addAll(DemoData.messages(demoAccounts()));
+        }
         List<EmailMessage> sorted = new ArrayList<>(inbox);
         sorted.sort((x, y) -> {
             long a = x.getSentDate() == null ? 0 : x.getSentDate().getTime();
@@ -115,6 +170,11 @@ public class MailEngine {
 
     /** 以指定账户发信 */
     public void sendMail(String accountId, String to, String subject, String body) throws Exception {
+        if (demoMode) {
+            // 演示模式：只打一行日志，绝不真正联网发信
+            System.out.println("[演示模式] 模拟发送 -> " + to + " | 主题：" + subject + "（未真正联网）");
+            return;
+        }
         EmailAccount a = store.loadAll().stream()
                 .filter(x -> x.getId().equals(accountId)).findFirst().orElse(null);
         if (a == null) throw new IllegalArgumentException("账户不存在");

@@ -37,6 +37,10 @@ public class MainApp extends Application {
     public void start(Stage stage) {
         String dbPath = System.getProperty("user.home") + "/.mailmaster/db";
         engine = new MailEngine(dbPath);
+        // 本机还没录入任何真实邮箱时，自动进入演示模式：用示例数据把界面铺满，无需授权码
+        if (!engine.hasRealAccounts()) {
+            engine.enterDemoMode();
+        }
         engine.setOnUpdate(() -> Platform.runLater(this::reload));
         engine.startAutoRefresh(60);
 
@@ -49,7 +53,11 @@ public class MainApp extends Application {
         refreshBtn.setOnAction(e -> {
             try { engine.refresh(); } catch (Exception ex) { alert("刷新失败: " + ex.getMessage()); }
         });
-        ToolBar tb = new ToolBar(addBtn, composeBtn, refreshBtn);
+        // 演示模式开关：随时在「示例数据」和「真实邮箱」之间切换
+        ToggleButton demoBtn = new ToggleButton("🎭 演示模式");
+        demoBtn.setSelected(engine.isDemoMode());
+        demoBtn.setOnAction(e -> toggleDemo(demoBtn, stage));
+        ToolBar tb = new ToolBar(addBtn, composeBtn, refreshBtn, new Separator(), demoBtn);
 
         // 统一收件箱表格
         table = new TableView<>();
@@ -87,7 +95,7 @@ public class MainApp extends Application {
         BorderPane.setMargin(viewer, new Insets(4));
 
         Scene scene = new Scene(root, 1024, 640);
-        stage.setTitle("邮箱大师 MailMaster");
+        updateTitle(stage);
         stage.setScene(scene);
         stage.show();
 
@@ -147,9 +155,15 @@ public class MainApp extends Application {
                 String pw = pwd.getText().trim();
                 if (em.isEmpty() || pw.isEmpty()) { alert("邮箱和凭证都不能为空"); return null; }
                 try {
+                    engine.exitDemoMode();   // 录入真实账户后自动回到真实模式
                     engine.addAccount(em, provider.getValue(), pw);
+                    engine.startAutoRefresh(60);
                     engine.refresh();
-                } catch (Exception ex) { alert("添加失败: " + ex.getMessage()); }
+                    updateTitle(owner);
+                } catch (Exception ex) {
+                    if (!engine.hasRealAccounts()) engine.enterDemoMode(); // 失败则退回演示模式
+                    alert("添加失败: " + ex.getMessage());
+                }
             }
             return null;
         });
@@ -182,12 +196,41 @@ public class MainApp extends Application {
             if (bt == ButtonType.OK && fromBox.getValue() != null) {
                 try {
                     engine.sendMail(fromBox.getValue().getId(), to.getText().trim(), subject.getText(), body.getText());
-                    alert("已发送 ✅");
+                    alert(engine.isDemoMode()
+                            ? "✅ 演示模式：已模拟发送给 " + to.getText().trim() + "\n（未真正联网，仅本地演练）"
+                            : "已发送 ✅");
                 } catch (Exception ex) { alert("发送失败: " + ex.getMessage()); }
             }
             return null;
         });
         d.showAndWait();
+    }
+
+    /** 演示模式 <-> 真实模式 切换 */
+    private void toggleDemo(ToggleButton btn, Stage stage) {
+        if (btn.isSelected()) {
+            engine.enterDemoMode();
+        } else {
+            if (!engine.hasRealAccounts()) {
+                alert("还没有录入真实邮箱。\n请先点「+ 添加账户」，用授权码录入一个邮箱后，再退出演示模式。");
+                btn.setSelected(true);
+                return;
+            }
+            engine.exitDemoMode();
+            engine.startAutoRefresh(60); // 退出演示模式后才开始真实轮询
+            try {
+                engine.refresh();
+            } catch (Exception ex) {
+                alert("刷新失败: " + ex.getMessage());
+            }
+        }
+        updateTitle(stage);
+        reload();
+    }
+
+    private void updateTitle(Stage stage) {
+        stage.setTitle("邮箱大师 MailMaster"
+                + (engine.isDemoMode() ? "  —  演示模式（示例数据，未连接真实邮箱）" : ""));
     }
 
     private void alert(String msg) {
