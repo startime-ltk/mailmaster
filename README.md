@@ -85,7 +85,22 @@ Gmail 需 OAuth2 授权且国内需代理，`ProviderPresets` 已留接口，后
 ## 构建与运行
 ```bash
 cd mailmaster
-mvn clean javafx:run        # 启动桌面端
+
+# 桌面端（JavaFX）
+mvn clean javafx:run
+
+# 网页版（手机浏览器可访问）
+mvn clean compile exec:java                  # 默认端口 8080
+mvn clean compile exec:java -Dexec.args=9090 # 指定端口 9090
+```
+- 网页版启动后：本机访问 `http://localhost:8080`；**手机与电脑同一 WiFi 时**，
+  访问 `http://<电脑局域网IP>:8080` 即可当 App 使用（界面为移动端样式）。
+- 网页版与桌面端**共用同一套账户库**（`~/.mailmaster/db`）：任一端添加账户，另一端也能看到。
+- 网页版对外暴露的最小 REST：`GET /api/status`、`GET /api/accounts`、`GET /api/inbox`、
+  `GET /api/messages/{id}`、`POST /api/accounts`、`POST /api/send`、`DELETE /api/accounts/{id}`、
+  `POST /api/demo/toggle`。要做小程序后端或自建前端，直接复用这套接口即可。
+
+```bash
 mvn clean package          # 打包（可用 jpackage 进一步生成安装包）
 ```
 
@@ -94,7 +109,7 @@ mvn clean package          # 打包（可用 jpackage 进一步生成安装包�
 ```bash
 mvn clean javafx:run
 ```
-- 本机**还没录入任何真实账户**时，会自动进入演示模式：
+- 桌面端或网页版在本机**还没录入任何真实账户**时，都会自动进入演示模式：
   收件箱里铺满示例数据 —— **3 个示例邮箱 + 7 封邮件**（覆盖 QQ / 163 / Outlook 三种服务商）。
 - 窗口标题会显示「演示模式（示例数据，未连接真实邮箱）」；工具栏的 🎭 **演示模式** 按钮可随时来回切换。
 - 演示模式下点「写邮件」只会**模拟发送**（控制台打印一行日志），**不会真的联网发信**，可以放心点。
@@ -108,10 +123,12 @@ mvn clean javafx:run
 - 生产环境请设置环境变量 `MAILMASTER_AES_KEY`（≥16 字节），否则回退内置默认密钥（仅开发用）
 - 切勿把含真实凭证的数据库文件提交到代码仓库
 
-## 多端扩展路线（规划）
-- **Web**：用 Spring Boot 包裹 `core` 暴露 REST（`/accounts`、`/messages`、`/send`），前端任意框架调用
-- **小程序**：`core` 部署到服务端（小程序不能直连 IMAP），小程序 UI 调 HTTPS API（需备案域名）
-- 三端共享 `core` 的模型、存储格式与加密方案
+## 多端扩展路线
+- **Web（已实现 ✅）**：`web/` 包用 JDK 自带 `HttpServer` 把 `core` 包成 REST + 静态页面，
+  手机浏览器直接访问即可，无需额外框架。逻辑全部复用 `core`，零重写。
+- **小程序**：把 `web` 包部署到服务端（小程序不能直连 IMAP），小程序 UI 调本项目的 `/api/*` 接口即可
+  （注意：小程序要求 HTTPS + 备案域名）。
+- 三端共享 `core` 的模型、存储格式与加密方案。
 
 ## 提交到 GitHub（首次）
 ```bash

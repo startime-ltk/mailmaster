@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>邮箱大师</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">📧 邮箱大师</div>
+  <div class="actions">
+    <span id="demoBadge" class="badge demo" hidden>演示</span>
+    <button id="refreshBtn" class="icon-btn" title="刷新">⟳</button>
+    <button id="addBtn" class="icon-btn" title="添加账户">＋</button>
+    <button id="composeBtn" class="icon-btn" title="写邮件">✎</button>
+  </div>
+</header>
+
+<main class="container">
+  <section id="accounts" class="accounts"></section>
+  <h3 class="section-title">收件箱</h3>
+  <section id="inbox" class="inbox"></section>
+  <p id="empty" class="empty" hidden>收件箱为空</p>
+</main>
+
+<!-- 邮件详情 -->
+<div id="msgModal" class="modal" hidden>
+  <div class="modal-card">
+    <div class="modal-head"><span id="msgSubject"></span><button class="close" data-close>✕</button></div>
+    <div class="msg-meta" id="msgMeta"></div>
+    <iframe id="msgBody" class="msg-body"></iframe>
+  </div>
+</div>
+
+<!-- 添加账户 -->
+<div id="addModal" class="modal" hidden>
+  <div class="modal-card">
+    <div class="modal-head"><span>添加邮箱账户</span><button class="close" data-close>✕</button></div>
+    <label>邮箱地址<input id="addEmail" type="email" placeholder="123456@qq.com"></label>
+    <label>服务商
+      <select id="addProvider">
+        <option value="QQ">QQ邮箱</option>
+        <option value="NETEASE">网易163</option>
+        <option value="OUTLOOK">Outlook/Hotmail</option>
+      </select>
+    </label>
+    <label>授权码 / 密码<input id="addPassword" type="password" placeholder="16位授权码（非登录密码）"></label>
+    <label>显示名（可选）<input id="addName" placeholder="如：我的QQ邮箱"></label>
+    <p class="hint" id="addHint"></p>
+    <button id="addSubmit" class="primary">保存</button>
+  </div>
+</div>
+
+<!-- 写邮件 -->
+<div id="composeModal" class="modal" hidden>
+  <div class="modal-card">
+    <div class="modal-head"><span>写邮件</span><button class="close" data-close>✕</button></div>
+    <label>发件账户<select id="composeFrom"></select></label>
+    <label>收件人<input id="composeTo" type="email" placeholder="to@example.com"></label>
+    <label>主题<input id="composeSubject"></label>
+    <label>正文<textarea id="composeBody" rows="6"></textarea></label>
+    <button id="composeSubmit" class="primary">发送</button>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="/app.js"></script>
+</body>
+</html>
