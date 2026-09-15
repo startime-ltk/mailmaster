@@ -104,6 +104,15 @@ mvn clean compile exec:java -Dexec.args=9090 # 指定端口 9090
 mvn clean package          # 打包（可用 jpackage 进一步生成安装包）
 ```
 
+## 最简使用：单文件 Jar（本机只需装 JDK）
+不想装 Maven、不想敲一长串命令？项目已打包出 **`dist/MailMaster.jar`**（约 5.5MB，已含全部依赖，且不含 JavaFX，Windows / macOS / Linux 通用）：
+```bash
+java -jar dist/MailMaster.jar          # 默认 8080 端口
+java -jar dist/MailMaster.jar 9090    # 指定端口 9090
+```
+启动后本机浏览器开 `http://localhost:8080`；**手机与电脑同一 WiFi 时**开 `http://<电脑局域网IP>:8080` 即可当 App 使用。
+> 重新生成该 jar：`mvn clean package`（产物在 `target/mailmaster-1.0.0.jar`，已自动复制到 `dist/`）。
+
 ## 演示模式（没有授权码也能先看效果）
 授权码还没搞定、或只想先看看界面长什么样时，直接启动即可：
 ```bash

@@ -24,3 +24,6 @@ db.mv.db
 # 系统文件
 .DS_Store
 Thumbs.db
+
+# shade 插件临时文件
+dependency-reduced-pom.xml
