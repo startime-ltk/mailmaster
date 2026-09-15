@@ -27,3 +27,7 @@ Thumbs.db
 
 # shade 插件临时文件
 dependency-reduced-pom.xml
+
+# 安卓端依赖必须随仓库提交（覆盖上面的 *.jar，否则 CI 构建缺 JavaMail）
+!android/libs/
+!android/libs/*.jar

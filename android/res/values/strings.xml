@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">邮箱大师</string>
+    <string name="demo_banner">演示模式 · 示例数据（未连接真实邮箱）</string>
+    <string name="menu_add_account">添加账户</string>
+    <string name="menu_toggle_demo">切换演示</string>
+    <string name="add_account_title">添加邮箱账户</string>
+    <string name="hint_email">邮箱地址</string>
+    <string name="hint_auth">授权码（非登录密码）</string>
+    <string name="btn_save">保存</string>
+    <string name="hint_to">收件人</string>
+    <string name="hint_subject">主题</string>
+    <string name="hint_body">正文</string>
+    <string name="btn_send">发送</string>
+    <string name="send_ok">已发送（演示模式·模拟）</string>
+    <string name="send_real_ok">已真实发送</string>
+    <string name="send_fail">发送失败，请检查授权码/网络</string>
+    <string name="toast_added">已添加，演示模式已退出</string>
+    <string name="toast_fill_to">请填写收件人</string>
+    <string name="no_messages">暂无邮件</string>
+    <string name="label_from">发件账户</string>
+</resources>

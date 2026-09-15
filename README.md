@@ -135,6 +135,9 @@ mvn clean javafx:run
 ## 多端扩展路线
 - **Web（已实现 ✅）**：`web/` 包用 JDK 自带 `HttpServer` 把 `core` 包成 REST + 静态页面，
   手机浏览器直接访问即可，无需额外框架。逻辑全部复用 `core`，零重写。
+- **安卓 App（已实现 ✅，独立 APK）**：`core` 的模型 / AES / 演示数据 / IMAP·SMTP 思路移植为原生 Android（Java），
+  用安卓兼容版 JavaMail 实现真实收发。产出 `MailMaster-debug.apk`（演示模式默认，可加真实账户）。
+  工程与构建脚本见同仓库 `android/` 目录（手动 aapt2 + d8 + apksigner 构建，无需 Android Studio）。`.github/workflows/build-apk.yml` 已实现 **push 自动出 APK**：推到 GitHub 即构建并生成可下载的 `MailMaster-debug.apk`，打 `v*` tag 自动发 Release。详见 `android/README.md`。
 - **小程序**：把 `web` 包部署到服务端（小程序不能直连 IMAP），小程序 UI 调本项目的 `/api/*` 接口即可
   （注意：小程序要求 HTTPS + 备案域名）。
 - 三端共享 `core` 的模型、存储格式与加密方案。

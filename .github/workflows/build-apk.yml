@@ -1,0 +1,81 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:   # 允许在 GitHub 网页 Actions 页手动触发
+
+permissions:
+  contents: write      # 打 tag 时创建 Release 需要写权限
+
+jobs:
+  build:
+    name: 构建并签名 APK
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_HOME: ${{ github.workspace }}/android-sdk
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: 缓存 Android SDK
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.ANDROID_HOME }}
+          key: android-sdk-34-${{ runner.os }}
+
+      - name: 安装 Android SDK (build-tools;34.0.0 + platforms;android-34)
+        # runner 为 ubuntu，可直连 dl.google.com；本步骤幂等，缓存命中时跳过下载
+        run: |
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+          if [ ! -f "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
+            echo "下载 commandlinetools ..."
+            curl -fsSL -o /tmp/cmdline.zip \
+              https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+            unzip -q /tmp/cmdline.zip -d "$ANDROID_HOME/cmdline-tools"
+            mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+          fi
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+          yes | sdkmanager --sdk_root="$ANDROID_HOME" --licenses >/dev/null
+          sdkmanager --sdk_root="$ANDROID_HOME" "build-tools;34.0.0" "platforms;android-34"
+
+      - name: 构建 APK
+        working-directory: android
+        env:
+          # 若仓库配置了 Secrets，则打 release 包；否则打 debug 包
+          KEYSTORE_PATH: ${{ github.workspace }}/android/release.keystore
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEYSTORE_PASS: ${{ secrets.KEYSTORE_PASS }}
+          KEY_PASS: ${{ secrets.KEY_PASS }}
+        run: |
+          # 把 Secrets 里的 release keystore（Base64）还原为文件（可选）
+          if [ -n "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > "$KEYSTORE_PATH"
+          fi
+          chmod +x build_apk.sh
+          ANDROID_HOME="$ANDROID_HOME" bash build_apk.sh
+
+      - name: 上传 APK 为构件 (Artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: MailMaster-APK
+          path: android/MailMaster*.apk
+          if-no-files-found: error
+
+      - name: 打 tag 时创建 Release 并附 APK
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: android/MailMaster*.apk
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

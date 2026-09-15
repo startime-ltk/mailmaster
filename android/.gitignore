@@ -1,0 +1,14 @@
+# 构建产物（由 build_apk.sh 生成，勿提交）
+base.apk
+aligned.apk
+classes.dex
+compiled_res.zip
+out/
+gen/
+dexout/
+*.apk
+*.idsig
+
+# 密钥（CI 用 Secrets 注入，勿提交）
+debug.keystore
+release.keystore
