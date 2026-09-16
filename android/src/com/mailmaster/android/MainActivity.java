@@ -109,6 +109,11 @@ public class MainActivity extends Activity {
             return true;
         }
         if (item.getItemId() == R.id.menu_demo) {
+            // 没有真实账户时不切到真实模式，否则会去连示例账户的假服务器空等
+            if (store.demoMode && !store.hasRealAccount()) {
+                Toast.makeText(this, R.string.toast_need_real_account, Toast.LENGTH_SHORT).show();
+                return true;
+            }
             store.demoMode = !store.demoMode;
             refresh();
             return true;

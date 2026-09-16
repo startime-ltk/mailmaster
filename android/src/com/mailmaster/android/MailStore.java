@@ -57,6 +57,14 @@ public class MailStore {
         save(ctx);
     }
 
+    /** 是否存在真实（非演示）账户 */
+    public boolean hasRealAccount() {
+        for (MailAccount a : accounts) {
+            if (!a.id.startsWith("demo-")) return true;
+        }
+        return false;
+    }
+
     public void save(Context ctx) {
         try {
             JSONArray arr = new JSONArray();
