@@ -18,6 +18,8 @@
     <string name="send_fail">发送失败，请检查授权码/网络</string>
     <string name="toast_added">已添加，演示模式已退出</string>
     <string name="toast_need_real_account">请先添加真实邮箱账户</string>
+    <string name="hint_search">搜索全部邮箱（主题 / 发件人 / 正文）</string>
+    <string name="search_no_result">没有匹配的邮件</string>
     <string name="toast_fill_to">请填写收件人</string>
     <string name="no_messages">暂无邮件</string>
     <string name="label_from">发件账户</string>

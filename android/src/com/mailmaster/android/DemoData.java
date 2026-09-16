@@ -37,6 +37,9 @@ public class DemoData {
         add(m, "demo-outlook", "demo-outlook@example.com","Microsoft <account@microsoft.com>",    "Security alert",                  "We noticed a new sign-in to your account.",             now - 8*H,  true);
         add(m, "demo-outlook", "demo-outlook@example.com","Coursera <no-reply@coursera.org>",    "课程进度提醒",                     "您已连续学习 7 天，继续加油！",                       now - 50*H, false);
         add(m, "demo-qq",      "demo-qq@example.com",     "妈妈",                                "记得吃饭",                         "今天降温了，多穿点，好好学习。",                      now - 72*H, false);
+        // 下面两封用于直观展示「智能分类」：一封会被判为推广、一封判为社交
+        add(m, "demo-163",     "demo-163@example.com",    "京东 <promo@jd.com>",                 "限时优惠！家居专场满 300 减 100",   "限时促销，点击领取优惠券。若不想收到此类邮件请退订。",   now - 12*H, false);
+        add(m, "demo-qq",      "demo-qq@example.com",     "微信团队 <wechat@weixin.qq.com>",      "好友请求通知",                     "你有一位新的好友请求，点击处理。",                    now - 40*H, false);
         return m;
     }
 
@@ -52,6 +55,7 @@ public class DemoData {
         x.body = body;
         x.date = date;
         x.unread = unread;
+        x.category = Classifier.classify(from, subject, body);
         m.add(x);
     }
 }

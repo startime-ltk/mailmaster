@@ -4,17 +4,21 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -24,7 +28,10 @@ public class MainActivity extends Activity {
 
     private ListView list;
     private TextView banner;
+    private EditText search;
     private ArrayAdapter<MailMessage> adapter;
+    /** 当前全量邮件（未过滤），搜索时从这里筛选 */
+    private List<MailMessage> all = new ArrayList<>();
 
     @Override
     protected void onCreate(Bundle b) {
@@ -33,6 +40,27 @@ public class MainActivity extends Activity {
         store.init(this);
         banner = findViewById(R.id.banner);
         list = findViewById(R.id.list);
+        search = findViewById(R.id.et_search);
+
+        // 列表为空时显示提示（搜索无结果等）
+        list.setEmptyView(findViewById(R.id.tv_empty));
+
+        // 输入即筛选：跨账户统一搜索
+        search.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                applyFilter();
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+            }
+        });
+
         refresh();
 
         list.setOnItemClickListener(new AdapterView.OnItemClickListener() {
@@ -73,8 +101,26 @@ public class MainActivity extends Activity {
         }).start();
     }
 
+    /** 保存全量邮件并套用当前搜索条件 */
     private void setList(List<MailMessage> msgs) {
-        adapter = new ArrayAdapter<MailMessage>(this, R.layout.item_message, R.id.tv_subject, msgs) {
+        all = new ArrayList<>();
+        if (msgs != null) all.addAll(msgs);
+        applyFilter();
+    }
+
+    /**
+     * 跨账户统一搜索：一次搜索所有已录入邮箱，
+     * 匹配范围 = 主题 + 发件人 + 正文 + 所属邮箱地址。
+     */
+    private void applyFilter() {
+        String q = search.getText().toString().trim().toLowerCase(Locale.CHINA);
+        List<MailMessage> shown = new ArrayList<>();
+        for (int i = 0; i < all.size(); i++) {
+            MailMessage m = all.get(i);
+            if (q.length() == 0 || match(m, q)) shown.add(m);
+        }
+
+        adapter = new ArrayAdapter<MailMessage>(this, R.layout.item_message, R.id.tv_subject, shown) {
             @Override
             public View getView(int pos, View cv, android.view.ViewGroup parent) {
                 if (cv == null) {
@@ -86,10 +132,36 @@ public class MainActivity extends Activity {
                 SimpleDateFormat sdf = new SimpleDateFormat("MM-dd HH:mm", Locale.CHINA);
                 String when = (m.date > 0) ? sdf.format(new Date(m.date)) : "";
                 ((TextView) cv.findViewById(R.id.tv_date)).setText(when + " · " + m.accountEmail);
+
+                // 智能分类标签
+                TextView cat = cv.findViewById(R.id.tv_category);
+                String c = m.category;
+                if (c == null || c.length() == 0) {
+                    cat.setVisibility(View.GONE);
+                } else {
+                    cat.setVisibility(View.VISIBLE);
+                    cat.setText(c);
+                    cat.setBackgroundColor(getResources().getColor(colorOf(c)));
+                }
                 return cv;
             }
         };
         list.setAdapter(adapter);
+    }
+
+    private boolean match(MailMessage m, String q) {
+        return (m.subject != null && m.subject.toLowerCase(Locale.CHINA).contains(q))
+                || (m.from != null && m.from.toLowerCase(Locale.CHINA).contains(q))
+                || (m.body != null && m.body.toLowerCase(Locale.CHINA).contains(q))
+                || (m.accountEmail != null && m.accountEmail.toLowerCase(Locale.CHINA).contains(q));
+    }
+
+    /** 分类标签配色 */
+    private int colorOf(String c) {
+        if (Classifier.PROMO.equals(c)) return R.color.cat_promo;
+        if (Classifier.SOCIAL.equals(c)) return R.color.cat_social;
+        if (Classifier.OTHER.equals(c)) return R.color.cat_other;
+        return R.color.cat_important;
     }
 
     @Override

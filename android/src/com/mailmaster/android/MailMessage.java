@@ -11,4 +11,5 @@ public class MailMessage {
     public String body;
     public long date;       // epoch 毫秒
     public boolean unread;
+    public String category; // 智能分类：重要 / 推广 / 社交 / 其他
 }

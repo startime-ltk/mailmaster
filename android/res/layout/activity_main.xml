@@ -15,11 +15,35 @@
         android:text="@string/demo_banner"
         android:visibility="gone" />
 
+    <!-- 跨账户统一搜索：一次搜索所有已录入邮箱 -->
+    <EditText
+        android:id="@+id/et_search"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="@string/hint_search"
+        android:padding="10dp"
+        android:textSize="14sp"
+        android:background="#FFFFFF"
+        android:singleLine="true" />
+
     <ListView
         android:id="@+id/list"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
         android:divider="@android:color/darker_gray"
         android:dividerHeight="1dp" />
+
+    <TextView
+        android:id="@+id/tv_empty"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:padding="24dp"
+        android:gravity="center"
+        android:text="@string/search_no_result"
+        android:textSize="14sp"
+        android:textColor="@color/sub"
+        android:visibility="gone" />
 
 </LinearLayout>

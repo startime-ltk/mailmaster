@@ -5,4 +5,10 @@
     <color name="card">#FFFFFF</color>
     <color name="text">#222222</color>
     <color name="sub">#777777</color>
+
+    <!-- 智能分类标签配色 -->
+    <color name="cat_important">#E53935</color>
+    <color name="cat_promo">#FB8C00</color>
+    <color name="cat_social">#1E88E5</color>
+    <color name="cat_other">#9E9E9E</color>
 </resources>

@@ -60,15 +60,13 @@ public class MailService {
             x.accountId = a.id;
             x.accountEmail = a.email;
             Address[] f = mm.getFrom();
-            x.from = (f != null && f.length > 0) ? f[0].toString() : "";
+            x.from = (f != null && f.length > 0) ? MailParser.decodeHeader(f[0].toString()) : "";
             x.to = a.email;
-            x.subject = (mm.getSubject() == null) ? "(无主题)" : mm.getSubject();
-            try {
-                Object c = mm.getContent();
-                x.body = (c instanceof String) ? (String) c : c.toString();
-            } catch (Exception e) {
-                x.body = "";
-            }
+            // 主题/发件人做 encoded-word 解码；正文递归解析 multipart 并按 charset 解码（GBK 兜底）
+            x.subject = MailParser.decodeHeader(mm.getSubject());
+            if (x.subject.isEmpty()) x.subject = "(无主题)";
+            x.body = MailParser.extractBody(mm);
+            x.category = Classifier.classify(x.from, x.subject, x.body);
             x.date = (mm.getSentDate() != null) ? mm.getSentDate().getTime() : System.currentTimeMillis();
             try {
                 x.unread = !mm.getFlags().contains(Flags.Flag.SEEN);
