@@ -1,11 +1,15 @@
 package com.mailmaster.android;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CodingErrorAction;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.regex.Pattern;
 import javax.mail.Part;
 import javax.mail.internet.MimeMultipart;
@@ -171,6 +175,161 @@ public final class MailParser {
             out.write(buf, 0, n);
         }
         return out.toByteArray();
+    }
+
+    /**
+     * 提取 HTML 原文（保留富文本，供 WebView 渲染）。
+     * 与 extractBody 的区别：extractBody 会把标签扒掉变成纯文本，
+     * 而这里保留原始排版——课程通知、成绩单这类带表格的邮件必须靠它才看得清。
+     * 没有 HTML 部件时返回空串，由调用方决定回退到纯文本。
+     */
+    public static String extractHtml(Part p) {
+        try {
+            if (p == null) return "";
+            if (p.isMimeType("multipart/*")) {
+                Object c = p.getContent();
+                if (c instanceof MimeMultipart) {
+                    MimeMultipart mp = (MimeMultipart) c;
+                    for (int i = 0; i < mp.getCount(); i++) {
+                        Part child = mp.getBodyPart(i);
+                        if (child == null) continue;
+                        if (child.isMimeType("multipart/*")) {
+                            String inner = extractHtml(child);
+                            if (!inner.isEmpty()) return inner;
+                        } else if (child.isMimeType("text/html")) {
+                            String h = readTextPart(child);
+                            if (h != null && !h.trim().isEmpty()) return h;
+                        }
+                    }
+                }
+                return "";
+            }
+            if (p.isMimeType("text/html")) return readTextPart(p);
+            return "";
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /**
+     * 递归收集附件并保存到本地目录。
+     * 只把"非文本且有文件名"的部件当附件，避免把 HTML 正文里的内联图片误判成附件。
+     */
+    public static List<Attachment> extractAttachments(Part p, File dir) {
+        List<Attachment> out = new ArrayList<>();
+        try {
+            if (p == null || dir == null) return out;
+            if (!dir.exists()) dir.mkdirs();
+            collectAttachments(p, dir, out);
+        } catch (Exception e) {
+            // 单个附件失败不影响整体收信
+        }
+        return out;
+    }
+
+    private static void collectAttachments(Part p, File dir, List<Attachment> out) throws Exception {
+        if (p == null) return;
+        if (p.isMimeType("multipart/*")) {
+            Object c = p.getContent();
+            if (c instanceof MimeMultipart) {
+                MimeMultipart mp = (MimeMultipart) c;
+                for (int i = 0; i < mp.getCount(); i++) {
+                    collectAttachments(mp.getBodyPart(i), dir, out);
+                }
+            }
+            return;
+        }
+        String fn = p.getFileName();
+        String disp = p.getDisposition();
+        boolean declared = (disp != null && disp.equalsIgnoreCase(Part.ATTACHMENT));
+        boolean inline = (disp != null && disp.equalsIgnoreCase(Part.INLINE));
+        boolean looksLikeFile = (fn != null && fn.length() > 0 && !p.isMimeType("text/*"));
+        // 内联图片（cid 引用）已经嵌在正文里，不当附件重复展示
+        if (!declared && (!looksLikeFile || inline)) return;
+        if (fn == null || fn.length() == 0) return;
+
+        Attachment a = saveAttachment(p, dir, decodeHeader(fn));
+        if (a != null) out.add(a);
+    }
+
+    private static Attachment saveAttachment(Part p, File dir, String rawName) throws Exception {
+        String name = safeFileName(rawName);
+        if (name.length() == 0) name = "attachment.bin";
+        File f = new File(dir, name);
+        // 同名文件自动加序号，避免后一个覆盖前一个
+        int dup = 1;
+        while (f.exists()) {
+            int dot = name.lastIndexOf('.');
+            if (dot > 0) {
+                f = new File(dir, name.substring(0, dot) + "(" + dup + ")" + name.substring(dot));
+            } else {
+                f = new File(dir, name + "(" + dup + ")");
+            }
+            dup++;
+        }
+        InputStream in = null;
+        FileOutputStream os = null;
+        long size = 0;
+        try {
+            in = p.getInputStream();
+            os = new FileOutputStream(f);
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) > 0) {
+                os.write(buf, 0, n);
+                size += n;
+            }
+        } finally {
+            if (in != null) try { in.close(); } catch (Exception ignored) {}
+            if (os != null) try { os.close(); } catch (Exception ignored) {}
+        }
+        Attachment a = new Attachment();
+        a.name = name;
+        a.path = f.getAbsolutePath();
+        a.mime = baseMime(p.getContentType());
+        a.size = size;
+        return a;
+    }
+
+    /** 去掉路径分隔符，防止文件名里的 ../../ 写出到沙箱外面 */
+    private static String safeFileName(String name) {
+        if (name == null) return "";
+        String s = name.replace("\\", "/");
+        int slash = s.lastIndexOf('/');
+        if (slash >= 0) s = s.substring(slash + 1);
+        s = s.replace("/", "_").replace("\\", "_")
+                .replace("\n", "").replace("\r", "").replace("\t", "");
+        return s.trim();
+    }
+
+    /** 从 Content-Type 去掉 charset 等参数，只留主类型 */
+    private static String baseMime(String ct) {
+        if (ct == null) return "application/octet-stream";
+        int i = ct.indexOf(';');
+        String m = (i > 0) ? ct.substring(0, i) : ct;
+        return m.trim();
+    }
+
+    /**
+     * 把 HTML 原文整理成可直接喂给 WebView 的形态。
+     * 关键一步：抹掉邮件里的原始 charset 声明，统一按 UTF-8 渲染——
+     * 否则一封 GBK 的国内邮件在 WebView 里会显示成乱码，前面的解码功夫全白费。
+     */
+    public static String wrapForDisplay(String html) {
+        if (html == null) return "";
+        String s = html.trim();
+        if (s.isEmpty()) return "";
+        s = Pattern.compile("(?is)<meta[^>]*charset[^>]*>").matcher(s).replaceAll("");
+        String meta = "<meta charset=\"utf-8\">";
+        if (Pattern.compile("(?is)<head[^>]*>").matcher(s).find()) {
+            s = Pattern.compile("(?is)<head[^>]*>").matcher(s).replaceFirst("<head>" + meta);
+        } else if (Pattern.compile("(?is)<html[^>]*>").matcher(s).find()) {
+            s = Pattern.compile("(?is)<html[^>]*>").matcher(s)
+                    .replaceFirst("<html><head>" + meta + "</head>");
+        } else {
+            s = "<html><head>" + meta + "</head><body>" + s + "</body></html>";
+        }
+        return s;
     }
 
     /** HTML 转纯文本 */

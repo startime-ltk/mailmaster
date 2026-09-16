@@ -6,7 +6,7 @@
 ## 本项目包含
 | 内容 | 说明 |
 |---|---|
-| `src/` | Java 源码（8 个类：MainActivity / ComposeActivity / MessageActivity / MailService / MailStore / MailAccount / MailMessage / Crypto / DemoData） |
+| `src/` | Java 源码（13 个类：MainActivity / ComposeActivity / MessageActivity / MailService / MailStore / MailAccount / MailMessage / Attachment / MailParser / Classifier / AttachmentProvider / Crypto / DemoData） |
 | `res/` | 布局、菜单、配色、字符串、启动图标 |
 | `libs/` | 安卓兼容版 JavaMail：`android-mail-1.6.2.jar` + `android-activation-1.6.2.jar`（已随仓库提交，CI 无需联网拉） |
 | `build_apk.sh` | 手动/CI 通用构建脚本（aapt2 编译→链接→javac→d8→zipalign→apksigner） |
@@ -17,10 +17,21 @@
 - **中文编码治理**：GBK / GB2312 / UTF-8 全兼容，multipart 递归解析，缺 charset 自动探测兜底
 - **本地智能分类**：重要 / 推广 / 社交 / 其他，纯离线规则，邮件内容不出手机
 - **跨账户统一搜索**：一次搜索所有邮箱（主题 + 发件人 + 正文 + 所属邮箱）
+- **回复 / 转发**：自动带 `Re:` `Fwd:` 与引用原文，收件人自动填原发件人（会从「名称 &lt;地址&gt;」里抽出纯地址）
+- **附件收取**：自动落盘，点一下交给系统里能打开它的 App（WPS / 相册 / 浏览器）
+- **附件发送**：从系统文件选择器添加，中文附件名自动 encoded-word 编码
+- **已读标记**：列表左侧蓝点 + 主题加粗，打开即已读，真实账户会回写服务器 IMAP SEEN 标记
+- **HTML 富文本**：有 HTML 的邮件用 WebView 保留原排版（表格 / 加粗都还在），纯文本邮件回退 TextView
+- **隐私细节**：WebView 一律禁止加载远程资源——邮件里的追踪像素正是靠它统计你何时开信的
 - 写邮件任选账户发送（演示仅模拟；录入真实账户后真发）
 - 添加 QQ / 163 / Outlook 授权码（真实 IMAP 收 + SMTP 发）
-- 菜单一键切换「演示 / 真实」
+- 菜单一键切换「演示 / 真实」、一键刷新
 - 最低 Android 5.0，目标 API 34
+
+### v1.3 新增：自己写的 FileProvider
+Android 7.0 起把 `file://` 甩给别的 App 会抛 `FileUriExposedException`，常规做法是引入 AndroidX 的 FileProvider。
+本项目坚持零第三方依赖，所以直接用原生 `ContentProvider` 写了一个 30 行的极简版（`AttachmentProvider`），
+并做了目录白名单校验：只允许读本应用私有目录，拿到临时授权的第三方 App 借不到沙箱外的任何东西。
 
 ---
 
@@ -45,18 +56,29 @@
 4. **臃肿或复杂**：巨头臃肿、专业工具劝退 → 我们保持轻量
 
 ### 已实测验证（不是「应该能跑」）
+**v1.1～v1.2（中文治理 + 分类，9 项）**
 - GBK 主题 + GBK 正文 → 正确显示中文
 - multipart 邮件 → 正确提取正文（旧写法会输出 `MimeMultipart@xxx` 对象地址，已修复）
 - 无 charset 声明的 GBK 老邮件 → 自动探测并正确解码
 - 纯 HTML 邮件 → 正确转为纯文本
 - 智能分类对 9 封演示邮件 → 重要 5 / 推广 1 / 社交 1 / 其他 2，与预期一致
 
-### 下一步可加（按推荐顺序）
-1. 深色模式 + 滑动手势（低成本高感知）
-2. 离线增量同步（按 UID 增量拉取，技术深度）
-3. 邮件转待办 / 稍后处理（从工具升华为工作流）
-4. 安卓端：指纹锁 + 桌面小部件 + 新邮件通知
-5. 用 Android Keystore 替换当前硬编码的 AES 密钥（隐私卖点坐实）
+**v1.3（P0 基本盘，25 项全过）**
+构造一封"典型国内邮件"（GBK 主题 + alternative 正文 + 中文名 PDF 附件 + 恶意文件名附件）后：
+- GBK 主题 / 发件人解码 ✅、multipart 递归取正文 ✅
+- HTML 原文保留 ✅、抹掉原 `gbk` charset 声明并注入 UTF-8 ✅、表格结构保留 ✅
+- 识别出 2 个附件并落盘 ✅、中文附件名正确还原 ✅
+- **路径穿越被清洗**：附件名 `../../evil.txt` 被清洗成 `evil.txt`，没写出沙箱 ✅
+- 纯文本邮件不会误报附件 / HTML ✅
+- 回复主题不叠加 `Re:` ✅、转发 ✅、从「名称 &lt;地址&gt;」抽纯地址 ✅、引用原文带 `>` 前缀 ✅
+- 分类未回归（交易类仍优先于推广）✅
+
+### 下一步可加（P0 已做完，剩下按推荐顺序）
+1. **P1**：深色模式 + 滑动手势（低成本高感知）、未读计数、归档 / 删除
+2. **P1**：演示模式的「回复/转发/附件」目前只落本地提示，可补一个「发件箱」把演示邮件真的存下来，演示更闭环
+3. **P2**：增量同步（按 UID 增量拉取，突破当前"最近 30 封"限制）、本地全文索引、文件夹体系（已发送 / 草稿 / 垃圾箱）
+4. **P2**：把 `MailParser` + `Classifier` 下沉到 `core`，让网页版也具备分类与中文治理
+5. **P3**：指纹锁 + 桌面小部件 + 新邮件通知；用 Android Keystore 替换当前硬编码的 AES 密钥（隐私卖点坐实）
 
 ---
 
@@ -111,7 +133,7 @@ ANDROID_HOME=$ANDROID_HOME bash build_apk.sh
 
 ## 三、安装到手机
 ```bash
-adb install MailMaster-v1.2-debug.apk  # 电脑连手机
+adb install MailMaster-v1.3-debug.apk  # 电脑连手机
 # 或把 apk 传到手机，文件管理器点击安装（需开启「允许未知来源」）
 ```
 

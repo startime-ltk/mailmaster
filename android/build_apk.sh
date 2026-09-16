@@ -60,7 +60,9 @@ echo "== 2. 链接资源 + 生成 R.java =="
 
 echo "== 3. 编译 Java =="
 mkdir -p "$APP/out"
-javac -source 1.8 -target 1.8 \
+# -encoding UTF-8 必须显式写：源码里有大量中文注释与中文字符串，
+# 不同机器上 javac 的默认编码不一致会导致乱码甚至编译失败
+javac -encoding UTF-8 -source 1.8 -target 1.8 \
   -cp "$ANDROID_JAR:$LIBS/android-mail-1.6.2.jar:$LIBS/android-activation-1.6.2.jar" \
   -d "$APP/out" \
   $(find "$APP/gen" "$APP/src" -name '*.java')

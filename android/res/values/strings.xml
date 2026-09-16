@@ -23,4 +23,16 @@
     <string name="toast_fill_to">请填写收件人</string>
     <string name="no_messages">暂无邮件</string>
     <string name="label_from">发件账户</string>
+    <string name="btn_reply">回复</string>
+    <string name="btn_forward">转发</string>
+    <string name="btn_attach">添加附件</string>
+    <string name="btn_clear_attach">清除</string>
+    <string name="label_attachments">附件</string>
+    <string name="badge_attachment">附件</string>
+    <string name="toast_no_app">没有可打开该文件的应用</string>
+    <string name="toast_attach_pick_fail">读取附件失败</string>
+    <string name="menu_refresh">刷新</string>
+    <string name="toast_refreshing">正在收取…</string>
+    <string name="loading">正在收取邮件…</string>
+    <string name="unread_hint">未读</string>
 </resources>

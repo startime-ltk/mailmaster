@@ -16,8 +16,15 @@ public class MailStore {
 
     public List<MailAccount> accounts = new ArrayList<>();
     public boolean demoMode = true;
+    /** 供附件落盘等场景使用（保存 ApplicationContext，避免持有 Activity 泄漏） */
+    private Context ctx;
+
+    public Context context() {
+        return ctx;
+    }
 
     public void init(Context ctx) {
+        this.ctx = ctx.getApplicationContext();
         SharedPreferences sp = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         String raw = sp.getString("json", "");
         if (raw == null || raw.isEmpty()) {
@@ -90,7 +97,7 @@ public class MailStore {
     }
 
     public List<MailMessage> getInbox() {
-        if (demoMode) return DemoData.messages();
-        return MailService.fetchAll(accounts);
+        if (demoMode) return DemoData.messages(ctx);
+        return MailService.fetchAll(ctx, accounts);
     }
 }

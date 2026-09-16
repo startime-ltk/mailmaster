@@ -26,6 +26,8 @@ import java.util.Locale;
 public class MainActivity extends Activity {
     public static MailStore store = new MailStore();
 
+    private static final int REQ_OPEN = 2001;
+
     private ListView list;
     private TextView banner;
     private EditText search;
@@ -69,32 +71,36 @@ public class MainActivity extends Activity {
                 MailMessage m = adapter.getItem(pos);
                 if (m == null) return;
                 Intent it = new Intent(MainActivity.this, MessageActivity.class);
-                it.putExtra("subject", m.subject);
-                it.putExtra("from", m.from);
-                it.putExtra("to", m.to);
-                it.putExtra("date", m.date);
-                it.putExtra("body", m.body);
-                startActivity(it);
+                it.putExtra("msg", m);
+                // 用 ForResult 打开：详情页标记为已读后，回到列表要立刻生效
+                startActivityForResult(it, REQ_OPEN);
             }
         });
+    }
+
+    @Override
+    protected void onActivityResult(int req, int res, Intent data) {
+        super.onActivityResult(req, res, data);
+        if (req == REQ_OPEN) applyFilter(); // 已读状态变化，重绘列表
     }
 
     private void refresh() {
         banner.setVisibility(store.demoMode ? View.VISIBLE : View.GONE);
         if (store.demoMode) {
-            setList(DemoData.messages());
+            setList(DemoData.messages(this));
             return;
         }
         // 真实模式：先展示示例，后台拉取真实邮件
-        setList(DemoData.messages());
+        setList(DemoData.messages(this));
+        Toast.makeText(this, R.string.toast_refreshing, Toast.LENGTH_SHORT).show();
         new Thread(new Runnable() {
             @Override
             public void run() {
-                final List<MailMessage> real = MailService.fetchAll(store.accounts);
+                final List<MailMessage> real = MailService.fetchAll(MainActivity.this, store.accounts);
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        setList(real.isEmpty() ? DemoData.messages() : real);
+                        setList(real.isEmpty() ? DemoData.messages(MainActivity.this) : real);
                     }
                 });
             }
@@ -132,6 +138,20 @@ public class MainActivity extends Activity {
                 SimpleDateFormat sdf = new SimpleDateFormat("MM-dd HH:mm", Locale.CHINA);
                 String when = (m.date > 0) ? sdf.format(new Date(m.date)) : "";
                 ((TextView) cv.findViewById(R.id.tv_date)).setText(when + " · " + m.accountEmail);
+
+                // 未读：左侧蓝点 + 主题加粗
+                View dot = cv.findViewById(R.id.v_unread);
+                dot.setVisibility(m.unread ? View.VISIBLE : View.INVISIBLE);
+                TextView subj = cv.findViewById(R.id.tv_subject);
+                subj.setTypeface(null, m.unread ? android.graphics.Typeface.BOLD
+                        : android.graphics.Typeface.NORMAL);
+
+                // 有附件时显示回形针标记
+                TextView att = cv.findViewById(R.id.tv_attach);
+                att.setVisibility(m.hasAttachment() ? View.VISIBLE : View.GONE);
+                if (m.hasAttachment()) {
+                    att.setText(getString(R.string.badge_attachment) + " ×" + m.attachments.size());
+                }
 
                 // 智能分类标签
                 TextView cat = cv.findViewById(R.id.tv_category);
@@ -178,6 +198,10 @@ public class MainActivity extends Activity {
         }
         if (item.getItemId() == R.id.menu_add) {
             showAddDialog();
+            return true;
+        }
+        if (item.getItemId() == R.id.menu_refresh) {
+            refresh();
             return true;
         }
         if (item.getItemId() == R.id.menu_demo) {

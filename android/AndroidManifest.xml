@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.mailmaster.android"
-    android:versionCode="3"
-    android:versionName="1.2">
+    android:versionCode="4"
+    android:versionName="1.3">
 
     <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34" />
     <uses-permission android:name="android.permission.INTERNET" />
@@ -29,6 +29,13 @@
         <activity
             android:name=".MessageActivity"
             android:exported="false" />
+
+        <!-- 附件分享：把私有目录里的附件以 content:// 临时授权给外部 App 打开 -->
+        <provider
+            android:name=".AttachmentProvider"
+            android:authorities="com.mailmaster.android.attachments"
+            android:exported="false"
+            android:grantUriPermissions="true" />
 
     </application>
 </manifest>

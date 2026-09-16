@@ -2,55 +2,97 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:padding="14dp"
+    android:orientation="horizontal"
+    android:paddingLeft="10dp"
+    android:paddingRight="14dp"
+    android:paddingTop="14dp"
+    android:paddingBottom="14dp"
+    android:gravity="center_vertical"
     android:background="@color/card">
 
+    <!-- 未读小蓝点：已读时隐藏 -->
+    <View
+        android:id="@+id/v_unread"
+        android:layout_width="8dp"
+        android:layout_height="8dp"
+        android:layout_marginRight="8dp"
+        android:background="@drawable/dot_unread" />
+
     <LinearLayout
-        android:layout_width="match_parent"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical">
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/tv_subject"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:textSize="16sp"
+                android:textColor="@color/text" />
+
+            <!-- 智能分类标签：重要 / 推广 / 社交 / 其他，颜色在代码中按分类设置 -->
+            <TextView
+                android:id="@+id/tv_category"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="8dp"
+                android:paddingLeft="7dp"
+                android:paddingRight="7dp"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:textSize="11sp"
+                android:textColor="#FFFFFF"
+                android:visibility="gone" />
+
+        </LinearLayout>
 
         <TextView
-            android:id="@+id/tv_subject"
-            android:layout_width="0dp"
+            android:id="@+id/tv_from"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            android:textColor="@color/text" />
+            android:singleLine="true"
+            android:ellipsize="end"
+            android:textSize="13sp"
+            android:textColor="@color/sub"
+            android:layout_marginTop="4dp" />
 
-        <!-- 智能分类标签：重要 / 推广 / 社交 / 其他，颜色在代码中按分类设置 -->
-        <TextView
-            android:id="@+id/tv_category"
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginLeft="8dp"
-            android:paddingLeft="7dp"
-            android:paddingRight="7dp"
-            android:paddingTop="2dp"
-            android:paddingBottom="2dp"
-            android:textSize="11sp"
-            android:textColor="#FFFFFF"
-            android:visibility="gone" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="2dp">
+
+            <TextView
+                android:id="@+id/tv_date"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textSize="12sp"
+                android:textColor="@color/sub" />
+
+            <!-- 有附件时显示回形针标记 -->
+            <TextView
+                android:id="@+id/tv_attach"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/badge_attachment"
+                android:textSize="11sp"
+                android:textColor="@color/sub"
+                android:visibility="gone" />
+
+        </LinearLayout>
 
     </LinearLayout>
-
-    <TextView
-        android:id="@+id/tv_from"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textSize="13sp"
-        android:textColor="@color/sub"
-        android:layout_marginTop="4dp" />
-
-    <TextView
-        android:id="@+id/tv_date"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textSize="12sp"
-        android:textColor="@color/sub"
-        android:layout_marginTop="2dp" />
 
 </LinearLayout>

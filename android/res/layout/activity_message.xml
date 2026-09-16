@@ -1,37 +1,100 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:orientation="vertical"
     android:padding="16dp">
+
+    <TextView
+        android:id="@+id/tv_subject"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:textColor="@color/text" />
+
+    <TextView
+        android:id="@+id/tv_meta"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="13sp"
+        android:textColor="@color/sub"
+        android:layout_marginTop="8dp" />
+
+    <!-- 附件区：动态填充，每项可点击用其他应用打开 -->
+    <TextView
+        android:id="@+id/tv_attach_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/label_attachments"
+        android:textSize="13sp"
+        android:textColor="@color/sub"
+        android:layout_marginTop="10dp"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/attach_box"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:layout_marginTop="4dp" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#22000000"
+        android:layout_marginTop="10dp" />
+
+    <!-- 正文区：有 HTML 用 WebView 保留原排版，纯文本邮件用 TextView -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="10dp">
+
+        <ScrollView
+            android:id="@+id/sv_text"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <TextView
+                android:id="@+id/tv_body"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="15sp"
+                android:lineSpacingExtra="3dp"
+                android:textColor="@color/text" />
+        </ScrollView>
+
+        <WebView
+            android:id="@+id/wv_body"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone" />
+
+    </FrameLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical">
+        android:orientation="horizontal"
+        android:layout_marginTop="10dp">
 
-        <TextView
-            android:id="@+id/tv_subject"
-            android:layout_width="match_parent"
+        <Button
+            android:id="@+id/btn_reply"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:textColor="@color/text" />
+            android:layout_weight="1"
+            android:text="@string/btn_reply" />
 
-        <TextView
-            android:id="@+id/tv_meta"
-            android:layout_width="match_parent"
+        <Button
+            android:id="@+id/btn_forward"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:textSize="13sp"
-            android:textColor="@color/sub"
-            android:layout_marginTop="8dp" />
-
-        <TextView
-            android:id="@+id/tv_body"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:textSize="15sp"
-            android:textColor="@color/text"
-            android:layout_marginTop="12dp" />
+            android:layout_weight="1"
+            android:layout_marginLeft="8dp"
+            android:text="@string/btn_forward" />
 
     </LinearLayout>
-</ScrollView>
+
+</LinearLayout>
