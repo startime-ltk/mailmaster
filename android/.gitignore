@@ -12,3 +12,6 @@ dexout/
 # 密钥（CI 用 Secrets 注入，勿提交）
 debug.keystore
 release.keystore
+
+# 构建临时目录（版本注入时生成的临时 Manifest）
+.buildtmp/

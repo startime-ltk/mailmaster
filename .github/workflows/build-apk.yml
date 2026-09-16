@@ -53,6 +53,8 @@ jobs:
         env:
           # 若仓库配置了 Secrets，则打 release 包；否则打 debug 包
           KEYSTORE_PATH: ${{ github.workspace }}/android/release.keystore
+          # versionCode 用 run_number 自动递增（安卓要求每次发版递增；不改源文件）
+          APP_VERSION_CODE: ${{ github.run_number }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEYSTORE_PASS: ${{ secrets.KEYSTORE_PASS }}
           KEY_PASS: ${{ secrets.KEY_PASS }}

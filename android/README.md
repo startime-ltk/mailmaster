@@ -29,10 +29,17 @@ export ANDROID_HOME=/你的/android-sdk
 cd android
 chmod +x build_apk.sh
 ANDROID_HOME=$ANDROID_HOME bash build_apk.sh
-# 产出: android/MailMaster-debug.apk
+# 产出: android/MailMaster-v1.1-debug.apk（文件名自动带版本号）
 ```
 
 沙箱里我用腾讯内网镜像拉了离线 SDK 跑通；本机把 `ANDROID_HOME` 指向你的 SDK 即可。
+
+### 版本号规则（所有 apk 都带版本号）
+- **唯一数据源**：`AndroidManifest.xml` 的 `android:versionName` / `android:versionCode`。
+- **文件名自动跟随**：debug 包 → `MailMaster-v<版本>-debug.apk`；release 包 → `MailMaster-v<版本>.apk`。
+- **升版本只改一处**：改 Manifest 里这两个值，文件名与包内版本同步更新，脚本不用动。
+- **CI / 临时覆盖**：`APP_VERSION=2.0 APP_VERSION_CODE=10 bash build_apk.sh`，
+  不改源文件即可产出 `MailMaster-v2.0-debug.apk`（CI 用 `github.run_number` 让 versionCode 自动递增）。
 
 ## 二、GitHub Actions 自动出 APK（关键）
 仓库根已写好 `.github/workflows/build-apk.yml`，**push 到 GitHub 即自动构建**，无需手动。

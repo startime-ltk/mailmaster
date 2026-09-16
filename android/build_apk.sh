@@ -26,16 +26,35 @@ for f in "$AAPT2" "$BT/d8" "$BT/zipalign" "$BT/apksigner" "$ANDROID_JAR"; do
   fi
 done
 
-# 清理旧产物
-rm -f "$APP/base.apk" "$APP/aligned.apk" "$APP/classes.dex"
-rm -rf "$APP/dexout" "$APP/out" "$APP/gen" "$APP/compiled_res.zip"
+# 清理旧产物（含历史 apk，避免校验时选错文件）
+rm -f "$APP/base.apk" "$APP/aligned.apk" "$APP/classes.dex" "$APP"/MailMaster*.apk
+rm -rf "$APP/dexout" "$APP/out" "$APP/gen" "$APP/compiled_res.zip" "$APP/.buildtmp"
+
+# ---- 版本号：唯一数据源是 AndroidManifest，产出的 apk 文件名自动带上版本号 ----
+MANIFEST="$APP/AndroidManifest.xml"
+# 支持外部注入（CI 常用 github.run_number 让 versionCode 每次构建自动递增）
+if [ -n "$APP_VERSION_CODE" ] || [ -n "$APP_VERSION" ]; then
+  mkdir -p "$APP/.buildtmp"
+  cp "$MANIFEST" "$APP/.buildtmp/AndroidManifest.xml"
+  MANIFEST="$APP/.buildtmp/AndroidManifest.xml"
+  [ -n "$APP_VERSION_CODE" ] && \
+    sed -i "s/android:versionCode=\"[0-9]*\"/android:versionCode=\"$APP_VERSION_CODE\"/" "$MANIFEST"
+  [ -n "$APP_VERSION" ] && \
+    sed -i "s/android:versionName=\"[^\"]*\"/android:versionName=\"$APP_VERSION\"/" "$MANIFEST"
+fi
+VERSION=$(sed -n 's/.*android:versionName="\([^"]*\)".*/\1/p' "$MANIFEST" | head -1)
+VCODE=$(sed -n 's/.*android:versionCode="\([^"]*\)".*/\1/p' "$MANIFEST" | head -1)
+[ -z "$VERSION" ] && VERSION="unknown"
+DEBUG_NAME="MailMaster-v${VERSION}-debug.apk"
+RELEASE_NAME="MailMaster-v${VERSION}.apk"
+echo "版本: v$VERSION (versionCode ${VCODE:-?})"
 
 echo "== 1. 编译资源 =="
 "$AAPT2" compile --dir "$APP/res" -o "$APP/compiled_res.zip"
 
 echo "== 2. 链接资源 + 生成 R.java =="
 "$AAPT2" link -o "$APP/base.apk" -I "$ANDROID_JAR" \
-  --manifest "$APP/AndroidManifest.xml" \
+  --manifest "$MANIFEST" \
   -R "$APP/compiled_res.zip" \
   --java "$APP/gen" --auto-add-overlay
 
@@ -68,7 +87,7 @@ if [ -n "$KEYSTORE_PATH" ] && [ -f "$KEYSTORE_PATH" ]; then
   "$BT/apksigner" sign --ks "$KEYSTORE_PATH" \
     --ks-key-alias "${KEY_ALIAS:-androiddebugkey}" \
     --ks-pass env:KEYSTORE_PASS --key-pass env:KEY_PASS \
-    --out "$APP/MailMaster.apk" "$APP/aligned.apk"
+    --out "$APP/$RELEASE_NAME" "$APP/aligned.apk"
 else
   echo "  未提供 keystore，使用调试 keystore"
   if [ ! -f "$APP/debug.keystore" ]; then
@@ -79,7 +98,7 @@ else
   fi
   "$BT/apksigner" sign --ks "$APP/debug.keystore" \
     --ks-key-alias androiddebugkey --ks-pass pass:android --key-pass pass:android \
-    --out "$APP/MailMaster-debug.apk" "$APP/aligned.apk"
+    --out "$APP/$DEBUG_NAME" "$APP/aligned.apk"
 fi
 
 echo "== 8. 校验 =="
