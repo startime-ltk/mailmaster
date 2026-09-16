@@ -32,23 +32,42 @@ public class ComposeActivity extends Activity {
         send.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                MailAccount from = (MailAccount) spinner.getSelectedItem();
-                String t = to.getText().toString().trim();
+                final MailAccount from = (MailAccount) spinner.getSelectedItem();
+                final String t = to.getText().toString().trim();
                 if (from == null || t.isEmpty()) {
                     Toast.makeText(ComposeActivity.this, R.string.toast_fill_to, Toast.LENGTH_SHORT).show();
                     return;
                 }
-                boolean ok;
+                final String s = subj.getText().toString();
+                final String bd = body.getText().toString();
+
                 if (MainActivity.store.demoMode) {
-                    ok = true; // 演示模式：仅模拟，不联网
-                } else {
-                    ok = MailService.send(from, t, subj.getText().toString(), body.getText().toString());
+                    // 演示模式：仅模拟，不联网
+                    Toast.makeText(ComposeActivity.this, R.string.send_ok, Toast.LENGTH_LONG).show();
+                    finish();
+                    return;
                 }
-                int msg = ok
-                        ? (MainActivity.store.demoMode ? R.string.send_ok : R.string.send_real_ok)
-                        : R.string.send_fail;
-                Toast.makeText(ComposeActivity.this, msg, Toast.LENGTH_LONG).show();
-                if (ok) finish();
+
+                // 真实发送必须放到子线程：安卓禁止在主线程联网，
+                // 否则会抛 NetworkOnMainThreadException 直接闪退
+                send.setEnabled(false);
+                Toast.makeText(ComposeActivity.this, R.string.sending, Toast.LENGTH_SHORT).show();
+                new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        final boolean ok = MailService.send(from, t, s, bd);
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                Toast.makeText(ComposeActivity.this,
+                                        ok ? R.string.send_real_ok : R.string.send_fail,
+                                        Toast.LENGTH_LONG).show();
+                                send.setEnabled(true);
+                                if (ok) ComposeActivity.this.finish();
+                            }
+                        });
+                    }
+                }).start();
             }
         });
     }
