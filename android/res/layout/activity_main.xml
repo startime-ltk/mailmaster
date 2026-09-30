@@ -1,49 +1,161 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical">
+    android:layout_height="match_parent">
 
-    <TextView
-        android:id="@+id/banner"
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="@color/primary"
-        android:textColor="#FFFFFF"
-        android:padding="10dp"
-        android:textSize="13sp"
-        android:text="@string/demo_banner"
-        android:visibility="gone" />
+        android:layout_height="match_parent"
+        android:orientation="vertical">
 
-    <!-- 跨账户统一搜索：一次搜索所有已录入邮箱 -->
-    <EditText
-        android:id="@+id/et_search"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="@string/hint_search"
-        android:padding="10dp"
-        android:textSize="14sp"
-        android:background="#FFFFFF"
-        android:singleLine="true" />
+        <!-- 自绘标题栏：原生 Toolbar（API 21+），右侧三个图标按钮 -->
+        <android.widget.Toolbar
+            android:id="@+id/toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="?android:attr/actionBarSize"
+            android:background="@color/primary"
+            android:elevation="4dp"
+            android:contentInsetStart="0dp"
+            android:contentInsetLeft="0dp">
 
-    <ListView
-        android:id="@+id/list"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:divider="@android:color/darker_gray"
-        android:dividerHeight="1dp" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingLeft="16dp"
+                android:paddingRight="6dp">
 
-    <TextView
-        android:id="@+id/tv_empty"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:padding="24dp"
-        android:gravity="center"
-        android:text="@string/search_no_result"
-        android:textSize="14sp"
-        android:textColor="@color/sub"
-        android:visibility="gone" />
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
 
-</LinearLayout>
+                    <TextView
+                        android:id="@+id/tv_title"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/app_name"
+                        android:textColor="@color/on_primary"
+                        android:textSize="18sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tv_subtitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/on_primary_sub"
+                        android:textSize="12sp" />
+
+                </LinearLayout>
+
+                <ImageButton
+                    android:id="@+id/btn_compose"
+                    android:layout_width="42dp"
+                    android:layout_height="42dp"
+                    android:src="@drawable/ic_compose_white"
+                    android:scaleType="center"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/content_compose" />
+
+                <ImageButton
+                    android:id="@+id/btn_refresh"
+                    android:layout_width="42dp"
+                    android:layout_height="42dp"
+                    android:src="@drawable/ic_refresh_white"
+                    android:scaleType="center"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/content_refresh" />
+
+                <ImageButton
+                    android:id="@+id/btn_more"
+                    android:layout_width="42dp"
+                    android:layout_height="42dp"
+                    android:src="@drawable/ic_more_white"
+                    android:scaleType="center"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/content_more" />
+
+            </LinearLayout>
+        </android.widget.Toolbar>
+
+        <TextView
+            android:id="@+id/banner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/accent"
+            android:textColor="#FFFFFF"
+            android:padding="8dp"
+            android:textSize="12sp"
+            android:text="@string/demo_banner"
+            android:visibility="gone" />
+
+        <!-- 跨账户统一搜索：一次搜索所有已录入邮箱 -->
+        <EditText
+            android:id="@+id/et_search"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_margin="10dp"
+            android:hint="@string/hint_search"
+            android:padding="11dp"
+            android:drawableStart="@drawable/ic_search_gray"
+            android:drawablePadding="8dp"
+            android:textSize="14sp"
+            android:textColorHint="@color/sub"
+            android:background="@drawable/bg_search"
+            android:singleLine="true" />
+
+        <!-- 卡片式列表：分隔交给 item 自身留白，不再用通栏分割线 -->
+        <ListView
+            android:id="@+id/list"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:divider="@null"
+            android:dividerHeight="0dp"
+            android:clipToPadding="false"
+            android:paddingTop="2dp"
+            android:paddingBottom="88dp"
+            android:scrollbars="none" />
+
+        <LinearLayout
+            android:id="@+id/tv_empty"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:visibility="gone">
+
+            <ImageView
+                android:layout_width="120dp"
+                android:layout_height="120dp"
+                android:src="@drawable/ic_empty"
+                android:contentDescription="@string/no_messages" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/search_no_result"
+                android:textSize="14sp"
+                android:textColor="@color/sub" />
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <!-- 悬浮写信按钮 -->
+    <ImageButton
+        android:id="@+id/fab"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:layout_gravity="bottom|end"
+        android:layout_margin="20dp"
+        android:src="@drawable/ic_compose_white"
+        android:scaleType="center"
+        android:background="@drawable/bg_fab"
+        android:elevation="8dp"
+        android:contentDescription="@string/content_compose" />
+
+</FrameLayout>

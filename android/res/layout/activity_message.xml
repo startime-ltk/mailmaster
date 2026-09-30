@@ -2,55 +2,172 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="16dp">
+    android:orientation="vertical">
 
-    <TextView
-        android:id="@+id/tv_subject"
+    <android.widget.Toolbar
+        android:id="@+id/toolbar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textSize="18sp"
-        android:textStyle="bold"
-        android:textColor="@color/text" />
+        android:layout_height="?android:attr/actionBarSize"
+        android:background="@color/primary"
+        android:elevation="4dp"
+        android:contentInsetStart="0dp"
+        android:contentInsetLeft="0dp">
 
-    <TextView
-        android:id="@+id/tv_meta"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textSize="13sp"
-        android:textColor="@color/sub"
-        android:layout_marginTop="8dp" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingLeft="6dp"
+            android:paddingRight="16dp">
 
-    <!-- 附件区：动态填充，每项可点击用其他应用打开 -->
-    <TextView
-        android:id="@+id/tv_attach_title"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="@string/label_attachments"
-        android:textSize="13sp"
-        android:textColor="@color/sub"
-        android:layout_marginTop="10dp"
-        android:visibility="gone" />
+            <ImageButton
+                android:id="@+id/btn_back"
+                android:layout_width="42dp"
+                android:layout_height="42dp"
+                android:src="@drawable/ic_back_white"
+                android:scaleType="center"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/content_back" />
 
+            <TextView
+                android:id="@+id/tv_bar_title"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginLeft="8dp"
+                android:text="@string/bar_title_message"
+                android:textColor="@color/on_primary"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:singleLine="true"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/tv_bar_category"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingLeft="8dp"
+                android:paddingRight="8dp"
+                android:paddingTop="3dp"
+                android:paddingBottom="3dp"
+                android:textSize="11sp"
+                android:textColor="#FFFFFF"
+                android:visibility="gone" />
+
+        </LinearLayout>
+    </android.widget.Toolbar>
+
+    <!-- 头部信息卡 -->
     <LinearLayout
-        android:id="@+id/attach_box"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:layout_marginTop="4dp" />
+        android:padding="16dp">
 
-    <View
+        <TextView
+            android:id="@+id/tv_subject"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="@color/text" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="14dp">
+
+            <TextView
+                android:id="@+id/tv_avatar"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:gravity="center"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginLeft="12dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/tv_from"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textSize="14sp"
+                    android:textColor="@color/text"
+                    android:singleLine="true"
+                    android:ellipsize="end" />
+
+                <TextView
+                    android:id="@+id/tv_date"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textSize="12sp"
+                    android:textColor="@color/sub"
+                    android:layout_marginTop="2dp" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/tv_meta"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="12sp"
+            android:textColor="@color/sub"
+            android:layout_marginTop="10dp" />
+
+    </LinearLayout>
+
+    <!-- 附件卡 -->
+    <LinearLayout
+        android:id="@+id/attach_area"
         android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="#22000000"
-        android:layout_marginTop="10dp" />
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:layout_marginLeft="16dp"
+        android:layout_marginRight="16dp"
+        android:layout_marginBottom="12dp"
+        android:padding="12dp"
+        android:background="@drawable/bg_card"
+        android:elevation="1dp"
+        android:visibility="gone">
 
-    <!-- 正文区：有 HTML 用 WebView 保留原排版，纯文本邮件用 TextView -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/label_attachments"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:textColor="@color/sub" />
+
+        <LinearLayout
+            android:id="@+id/attach_box"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginTop="6dp" />
+
+    </LinearLayout>
+
+    <!-- 正文卡：有 HTML 用 WebView，纯文本回退 TextView，两者各自滚动 -->
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:layout_marginTop="10dp">
+        android:layout_marginLeft="16dp"
+        android:layout_marginRight="16dp"
+        android:layout_marginBottom="12dp"
+        android:background="@drawable/bg_card"
+        android:elevation="1dp">
 
         <ScrollView
             android:id="@+id/sv_text"
@@ -61,8 +178,9 @@
                 android:id="@+id/tv_body"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:padding="16dp"
                 android:textSize="15sp"
-                android:lineSpacingExtra="3dp"
+                android:lineSpacingExtra="4dp"
                 android:textColor="@color/text" />
         </ScrollView>
 
@@ -78,22 +196,34 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:layout_marginTop="10dp">
+        android:paddingLeft="16dp"
+        android:paddingRight="16dp"
+        android:paddingBottom="12dp">
 
         <Button
             android:id="@+id/btn_reply"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="@string/btn_reply" />
+            android:drawableStart="@drawable/ic_reply_blue"
+            android:drawablePadding="6dp"
+            android:gravity="center"
+            android:text="@string/btn_reply"
+            android:textColor="@color/primary"
+            android:background="@drawable/btn_outline" />
 
         <Button
             android:id="@+id/btn_forward"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:layout_marginLeft="8dp"
-            android:text="@string/btn_forward" />
+            android:layout_marginLeft="12dp"
+            android:drawableStart="@drawable/ic_forward_blue"
+            android:drawablePadding="6dp"
+            android:gravity="center"
+            android:text="@string/btn_forward"
+            android:textColor="@color/primary"
+            android:background="@drawable/btn_outline" />
 
     </LinearLayout>
 

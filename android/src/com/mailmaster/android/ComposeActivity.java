@@ -39,11 +39,17 @@ public class ComposeActivity extends Activity {
         // 回复/转发时默认用收件账户，而不是列表里的第一个
         preselectAccount();
 
+        findViewById(R.id.btn_back).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                finish();
+            }
+        });
+
         final EditText to = findViewById(R.id.et_to);
         final EditText subj = findViewById(R.id.et_subject);
         final EditText body = findViewById(R.id.et_body);
-        final TextView tvAtt = findViewById(R.id.tv_attachments);
-        final Button clear = findViewById(R.id.btn_clear_attach);
+        final TextView clear = findViewById(R.id.btn_clear_attach);
         Button send = findViewById(R.id.btn_send);
 
         Intent it = getIntent();
@@ -205,7 +211,7 @@ public class ComposeActivity extends Activity {
 
     private void refreshAttachLabel() {
         TextView tv = findViewById(R.id.tv_attachments);
-        Button clear = findViewById(R.id.btn_clear_attach);
+        TextView clear = findViewById(R.id.btn_clear_attach);
         if (files.isEmpty()) {
             tv.setVisibility(View.GONE);
             clear.setVisibility(View.GONE);

@@ -3,6 +3,7 @@ package com.mailmaster.android;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.text.TextUtils;
@@ -32,17 +33,49 @@ public class MessageActivity extends Activity {
             return;
         }
 
+        findViewById(R.id.btn_back).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                finish();
+            }
+        });
+
         ((TextView) findViewById(R.id.tv_subject)).setText(msg.subject);
 
+        // 头像与发件人行
+        TextView av = findViewById(R.id.tv_avatar);
+        av.setText(MainActivity.avatarText(msg.from));
+        GradientDrawable circle = new GradientDrawable();
+        circle.setShape(GradientDrawable.OVAL);
+        circle.setColor(msg.unread ? MainActivity.avatarColor(msg.from)
+                : getResources().getColor(R.color.avatar_read));
+        av.setBackground(circle);
+
+        ((TextView) findViewById(R.id.tv_from)).setText(nvl(msg.from));
+        String when = (msg.date > 0)
+                ? new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA).format(new Date(msg.date))
+                : "";
+        ((TextView) findViewById(R.id.tv_date)).setText(when);
+
         StringBuilder meta = new StringBuilder();
-        meta.append("发件人：").append(nvl(msg.from));
-        meta.append("\n收件人：").append(nvl(msg.to));
-        meta.append("\n所属邮箱：").append(nvl(msg.accountEmail));
-        if (msg.date > 0) {
-            meta.append("\n时间：").append(
-                    new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA).format(new Date(msg.date)));
-        }
+        meta.append("收件人：").append(nvl(msg.to));
+        meta.append("  ·  所属邮箱：").append(nvl(msg.accountEmail));
         ((TextView) findViewById(R.id.tv_meta)).setText(meta.toString());
+
+        // 分类胶囊放到标题栏右侧
+        TextView barCat = findViewById(R.id.tv_bar_category);
+        String c = msg.category;
+        if (c == null || c.length() == 0) {
+            barCat.setVisibility(View.GONE);
+        } else {
+            barCat.setVisibility(View.VISIBLE);
+            barCat.setText(c);
+            GradientDrawable chip = new GradientDrawable();
+            float dp = getResources().getDisplayMetrics().density;
+            chip.setCornerRadius(10 * dp);
+            chip.setColor(getResources().getColor(catColor(c)));
+            barCat.setBackground(chip);
+        }
 
         renderAttachments();
         renderBody();
@@ -52,22 +85,32 @@ public class MessageActivity extends Activity {
 
     /** 附件列表：点一下交给系统里能处理该类型文件的 App 打开 */
     private void renderAttachments() {
-        TextView title = findViewById(R.id.tv_attach_title);
+        LinearLayout area = findViewById(R.id.attach_area);
         LinearLayout box = findViewById(R.id.attach_box);
         if (!msg.hasAttachment()) {
-            title.setVisibility(View.GONE);
+            area.setVisibility(View.GONE);
             return;
         }
-        title.setVisibility(View.VISIBLE);
+        area.setVisibility(View.VISIBLE);
         box.removeAllViews();
+        float dp = getResources().getDisplayMetrics().density;
         for (final Attachment a : msg.attachments) {
             if (a == null) continue;
             TextView tv = new TextView(this);
             tv.setText(a.name + "（" + a.sizeText() + "）");
             tv.setTextColor(getResources().getColor(R.color.text));
             tv.setTextSize(14);
-            tv.setPadding(0, 10, 0, 10);
-            tv.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0);
+            tv.setPadding((int) (12 * dp), (int) (10 * dp), (int) (12 * dp), (int) (10 * dp));
+            GradientDrawable item = new GradientDrawable();
+            item.setCornerRadius(8 * dp);
+            item.setColor(0xFFF1F4F8);
+            tv.setBackground(item);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            if (box.getChildCount() > 0) {
+                lp.topMargin = (int) (6 * dp);
+            }
+            tv.setLayoutParams(lp);
             tv.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
@@ -168,6 +211,13 @@ public class MessageActivity extends Activity {
         } catch (Exception ignored) {
         }
         return null;
+    }
+
+    private int catColor(String c) {
+        if (Classifier.PROMO.equals(c)) return R.color.cat_promo;
+        if (Classifier.SOCIAL.equals(c)) return R.color.cat_social;
+        if (Classifier.OTHER.equals(c)) return R.color.cat_other;
+        return R.color.cat_important;
     }
 
     private String nvl(String s) {

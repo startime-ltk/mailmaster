@@ -35,4 +35,10 @@
     <string name="toast_refreshing">正在收取…</string>
     <string name="loading">正在收取邮件…</string>
     <string name="unread_hint">未读</string>
+    <string name="bar_title_message">邮件详情</string>
+    <string name="bar_title_compose">写邮件</string>
+    <string name="content_back">返回</string>
+    <string name="content_compose">写邮件</string>
+    <string name="content_refresh">刷新</string>
+    <string name="content_more">更多</string>
 </resources>

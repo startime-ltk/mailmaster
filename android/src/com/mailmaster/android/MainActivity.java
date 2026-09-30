@@ -3,10 +3,11 @@ package com.mailmaster.android;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.graphics.drawable.GradientDrawable;
+import android.graphics.Typeface;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
-import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.AdapterView;
@@ -14,6 +15,7 @@ import android.widget.ArrayAdapter;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ListView;
+import android.widget.PopupMenu;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -30,10 +32,17 @@ public class MainActivity extends Activity {
 
     private ListView list;
     private TextView banner;
+    private TextView subtitle;
     private EditText search;
     private ArrayAdapter<MailMessage> adapter;
     /** 当前全量邮件（未过滤），搜索时从这里筛选 */
     private List<MailMessage> all = new ArrayList<>();
+
+    /** 头像色板：按发件人地址哈希取色，同一个人永远同色 */
+    private static final int[] AVATAR_COLORS = {
+            0xFFE53935, 0xFF1E88E5, 0xFF43A047, 0xFFFB8C00,
+            0xFF8E24AA, 0xFF00897B, 0xFFD81B60, 0xFF6D4C41
+    };
 
     @Override
     protected void onCreate(Bundle b) {
@@ -41,11 +50,15 @@ public class MainActivity extends Activity {
         setContentView(R.layout.activity_main);
         store.init(this);
         banner = findViewById(R.id.banner);
+        subtitle = findViewById(R.id.tv_subtitle);
         list = findViewById(R.id.list);
         search = findViewById(R.id.et_search);
 
         // 列表为空时显示提示（搜索无结果等）
         list.setEmptyView(findViewById(R.id.tv_empty));
+
+        bindToolbar();
+        bindFab();
 
         // 输入即筛选：跨账户统一搜索
         search.addTextChangedListener(new TextWatcher() {
@@ -74,6 +87,44 @@ public class MainActivity extends Activity {
                 it.putExtra("msg", m);
                 // 用 ForResult 打开：详情页标记为已读后，回到列表要立刻生效
                 startActivityForResult(it, REQ_OPEN);
+            }
+        });
+    }
+
+    private void bindToolbar() {
+        findViewById(R.id.btn_compose).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startActivity(new Intent(MainActivity.this, ComposeActivity.class));
+            }
+        });
+        findViewById(R.id.btn_refresh).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                refresh();
+            }
+        });
+        findViewById(R.id.btn_more).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                PopupMenu pm = new PopupMenu(MainActivity.this, v);
+                pm.getMenuInflater().inflate(R.menu.main_menu, pm.getMenu());
+                pm.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
+                    @Override
+                    public boolean onMenuItemClick(MenuItem item) {
+                        return onOptionsItemSelected(item); // 复用既有菜单逻辑
+                    }
+                });
+                pm.show();
+            }
+        });
+    }
+
+    private void bindFab() {
+        findViewById(R.id.fab).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startActivity(new Intent(MainActivity.this, ComposeActivity.class));
             }
         });
     }
@@ -114,6 +165,19 @@ public class MainActivity extends Activity {
         applyFilter();
     }
 
+    /** 标题栏副标题：未读数 + 当前模式，一眼看清收件箱状态 */
+    private void updateSubtitle() {
+        int unread = 0;
+        for (MailMessage m : all) {
+            if (m.unread) unread++;
+        }
+        String status = (unread > 0)
+                ? getString(R.string.unread_hint) + " " + unread + " 封"
+                : "全部已读";
+        String mode = store.demoMode ? "演示模式" : (store.accounts.size() + " 个邮箱");
+        subtitle.setText(status + " · " + mode);
+    }
+
     /**
      * 跨账户统一搜索：一次搜索所有已录入邮箱，
      * 匹配范围 = 主题 + 发件人 + 正文 + 所属邮箱地址。
@@ -133,27 +197,35 @@ public class MainActivity extends Activity {
                     cv = getLayoutInflater().inflate(R.layout.item_message, parent, false);
                 }
                 MailMessage m = getItem(pos);
-                ((TextView) cv.findViewById(R.id.tv_subject)).setText(m.subject);
+                float dp = getResources().getDisplayMetrics().density;
+
+                // 头像：发件人首字 + 按地址取色；未读彩色、已读置灰
+                TextView av = cv.findViewById(R.id.tv_avatar);
+                av.setText(avatarText(m.from));
+                GradientDrawable circle = new GradientDrawable();
+                circle.setShape(GradientDrawable.OVAL);
+                circle.setColor(m.unread ? avatarColor(m.from) : getResources().getColor(R.color.avatar_read));
+                av.setBackground(circle);
+
+                // 未读主题加粗、颜色更深；已读常规
+                TextView subj = cv.findViewById(R.id.tv_subject);
+                subj.setText(m.subject);
+                subj.setTypeface(null, m.unread ? Typeface.BOLD : Typeface.NORMAL);
+                subj.setTextColor(getResources().getColor(m.unread ? R.color.text : R.color.sub));
+
                 ((TextView) cv.findViewById(R.id.tv_from)).setText(m.from);
                 SimpleDateFormat sdf = new SimpleDateFormat("MM-dd HH:mm", Locale.CHINA);
                 String when = (m.date > 0) ? sdf.format(new Date(m.date)) : "";
                 ((TextView) cv.findViewById(R.id.tv_date)).setText(when + " · " + m.accountEmail);
 
-                // 未读：左侧蓝点 + 主题加粗
-                View dot = cv.findViewById(R.id.v_unread);
-                dot.setVisibility(m.unread ? View.VISIBLE : View.INVISIBLE);
-                TextView subj = cv.findViewById(R.id.tv_subject);
-                subj.setTypeface(null, m.unread ? android.graphics.Typeface.BOLD
-                        : android.graphics.Typeface.NORMAL);
-
-                // 有附件时显示回形针标记
+                // 有附件时显示文档图标 + 数量
                 TextView att = cv.findViewById(R.id.tv_attach);
                 att.setVisibility(m.hasAttachment() ? View.VISIBLE : View.GONE);
                 if (m.hasAttachment()) {
-                    att.setText(getString(R.string.badge_attachment) + " ×" + m.attachments.size());
+                    att.setText("附件 ×" + m.attachments.size());
                 }
 
-                // 智能分类标签
+                // 智能分类标签：圆角彩色胶囊
                 TextView cat = cv.findViewById(R.id.tv_category);
                 String c = m.category;
                 if (c == null || c.length() == 0) {
@@ -161,12 +233,37 @@ public class MainActivity extends Activity {
                 } else {
                     cat.setVisibility(View.VISIBLE);
                     cat.setText(c);
-                    cat.setBackgroundColor(getResources().getColor(colorOf(c)));
+                    GradientDrawable chip = new GradientDrawable();
+                    chip.setCornerRadius(10 * dp);
+                    chip.setColor(getResources().getColor(colorOf(c)));
+                    cat.setBackground(chip);
                 }
                 return cv;
             }
         };
         list.setAdapter(adapter);
+        updateSubtitle();
+    }
+
+    /** 取发件人显示名的首字符（中文一个字、英文一个字母），空名回退邮箱前缀首字母 */
+    static String avatarText(String from) {
+        String name = (from == null) ? "" : from.trim();
+        int lt = name.indexOf('<');
+        if (lt > 0) name = name.substring(0, lt).trim();
+        if (name.isEmpty()) {
+            int at = (from == null) ? -1 : from.indexOf('@');
+            if (at > 0) name = from.substring(0, at);
+        }
+        if (name.isEmpty()) return "#";
+        return new String(Character.toChars(name.codePointAt(0))).toUpperCase(Locale.CHINA);
+    }
+
+    /** 头像颜色 = 色板[hash % 长度]，同一个人在列表任何位置都同色 */
+    static int avatarColor(String from) {
+        String key = (from == null) ? "" : from;
+        int h = key.hashCode();
+        if (h == Integer.MIN_VALUE) h = 42; // abs(MIN_VALUE) 会溢出，先转正
+        return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
     }
 
     private boolean match(MailMessage m, String q) {
@@ -182,12 +279,6 @@ public class MainActivity extends Activity {
         if (Classifier.SOCIAL.equals(c)) return R.color.cat_social;
         if (Classifier.OTHER.equals(c)) return R.color.cat_other;
         return R.color.cat_important;
-    }
-
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        getMenuInflater().inflate(R.menu.main_menu, menu);
-        return true;
     }
 
     @Override
@@ -232,10 +323,10 @@ public class MainActivity extends Activity {
         sa.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         sp.setAdapter(sa);
 
-        final android.widget.EditText email = new android.widget.EditText(this);
+        final EditText email = new EditText(this);
         email.setHint(R.string.hint_email);
         email.setInputType(android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
-        final android.widget.EditText pw = new android.widget.EditText(this);
+        final EditText pw = new EditText(this);
         pw.setHint(R.string.hint_auth);
 
         lay.addView(sp);

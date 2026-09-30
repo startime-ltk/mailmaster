@@ -1,14 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="primary">#2196F3</color>
-    <color name="bg">#F2F4F7</color>
+    <!-- Material 深蓝主色 + 琥珀强调色 -->
+    <color name="primary">#1565C0</color>
+    <color name="primary_dark">#0D47A1</color>
+    <color name="primary_light">#E3F0FC</color>
+    <color name="accent">#FF6D00</color>
+    <color name="on_primary">#FFFFFF</color>
+    <color name="on_primary_sub">#C5DCF7</color>
+
+    <color name="bg">#EEF1F5</color>
     <color name="card">#FFFFFF</color>
-    <color name="text">#222222</color>
-    <color name="sub">#777777</color>
+    <color name="text">#1B1F23</color>
+    <color name="sub">#7A828A</color>
+    <color name="divider">#E3E7EC</color>
+    <color name="chip_bg">#F1F4F8</color>
 
     <!-- 智能分类标签配色 -->
     <color name="cat_important">#E53935</color>
     <color name="cat_promo">#FB8C00</color>
     <color name="cat_social">#1E88E5</color>
     <color name="cat_other">#9E9E9E</color>
+
+    <!-- 已读头像灰 -->
+    <color name="avatar_read">#B0BEC5</color>
 </resources>
