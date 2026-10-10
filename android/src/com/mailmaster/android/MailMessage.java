@@ -33,7 +33,7 @@ public class MailMessage implements Serializable {
 
     /**
      * 从发件人字段里抽出纯邮箱地址。
-     * 形如「德州学院教务处 &lt;jwc@example.com&gt;」要拿到 jwc@example.com 才能直接回信，
+     * 形如「学校教务处 &lt;jwc@example.com&gt;」要拿到 jwc@example.com 才能直接回信，
      * 否则会把显示名一起塞进收件人框，发出去必失败。
      */
     public String fromAddress() {

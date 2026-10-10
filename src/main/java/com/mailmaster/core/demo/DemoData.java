@@ -46,7 +46,7 @@ public final class DemoData {
         EmailAccount ol = accounts.get(2);
 
         // —— QQ 邮箱（演示）——
-        all.add(msg(qq, "德州学院教务处 <jwc@example.com>",
+        all.add(msg(qq, "学校教务处 <jwc@example.com>",
                 "【重要】2026-2027 学年网上选课通知",
                 "同学你好：<br/>本学期网上选课将于 <b>9 月 20 日 9:00</b> 正式开放，"
                         + "请登录教务系统完成选课。<br/>逾期未选视为自动放弃，届时将无法补选。",
@@ -71,7 +71,7 @@ public final class DemoData {
         all.add(msg(ne, "青年志愿者协会 <volunteer@example.com>",
                 "周末志愿活动报名确认",
                 "你好，你报名的 <b>社区敬老志愿服务</b> 已确认成功。<br/>"
-                        + "集合时间：本周六 8:30 ｜ 地点：槐荫区和谐广场东门。",
+                        + "集合时间：本周六 8:30 ｜ 地点：学校东门（示例地点）。",
                 610, now));
 
         // —— Outlook（演示）——

@@ -50,11 +50,11 @@ public class DemoData {
                             + "春季学期：2027-02-28 开学\n暑假：2027-07-12 起\n");
             if (a1 != null) jwcAtts.add(a1);
             Attachment a2 = fakeFile(demoDir, "期末考试安排.csv",
-                    "课程,时间,地点\nJava 程序设计,2027-01-11 09:00,博文楼 301\n"
-                            + "数据结构,2027-01-13 14:00,博文楼 205\n");
+                    "课程,时间,地点\nJava 程序设计,2027-01-11 09:00,教学楼 301\n"
+                            + "数据结构,2027-01-13 14:00,教学楼 205\n");
             if (a2 != null) jwcAtts.add(a2);
         }
-        add(m, "demo-qq", "demo-qq@example.com", "德州学院教务处 <jwc@example.com>",
+        add(m, "demo-qq", "demo-qq@example.com", "学校教务处 <jwc@example.com>",
                 "【重要】2026-2027 学年校历安排",
                 "同学你好，附件为新学期校历与期末考试安排，请按时注册。",
                 now - 2 * H, true,
