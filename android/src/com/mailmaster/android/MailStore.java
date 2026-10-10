@@ -48,6 +48,7 @@ public class MailStore {
                 a.provider = o.getString("provider");
                 a.email = o.getString("email");
                 a.displayName = o.optString("displayName", "");
+                a.name = o.optString("nm", "");
                 a.password = Crypto.decrypt(o.getString("pw"));
                 a.imapHost = o.getString("ih");
                 a.imapPort = o.getInt("ip");
@@ -88,6 +89,7 @@ public class MailStore {
                 o.put("provider", a.provider);
                 o.put("email", a.email);
                 o.put("displayName", a.displayName);
+                o.put("nm", a.name);
                 o.put("pw", Crypto.encrypt(a.password));
                 o.put("ih", a.imapHost);
                 o.put("ip", a.imapPort);

@@ -43,4 +43,25 @@
     <string name="content_refresh">刷新</string>
     <string name="content_more">更多</string>
     <string name="empty_no_account">还没有添加邮箱\n点右下角 + 或右上角 ⋯ 添加账户</string>
+
+    <!-- 筛选栏 -->
+    <string name="filter_account_all">全部账户</string>
+    <string name="filter_inbox">收件箱</string>
+    <string name="filter_block">疑似骚扰拦截</string>
+    <string name="filter_all">全部</string>
+    <string name="filter_important">重要</string>
+    <string name="filter_social">社交</string>
+    <string name="filter_other">其他</string>
+    <string name="block_title">疑似骚扰拦截</string>
+    <string name="empty_inbox">收件箱是空的</string>
+    <string name="empty_block">暂无疑似推广邮件，主收件箱很干净</string>
+
+    <!-- 添加账户：自定义邮箱高级字段 -->
+    <string name="add_account_custom_hint">选「自定义」可手填服务器</string>
+    <string name="hint_imap_host">IMAP 服务器（如 imap.xxx.edu.cn）</string>
+    <string name="hint_imap_port">IMAP 端口（SSL 通常 993，STARTTLS 通常 143）</string>
+    <string name="hint_smtp_host">SMTP 服务器（如 smtp.xxx.edu.cn）</string>
+    <string name="hint_smtp_port">SMTP 端口（SSL 通常 465，STARTTLS 通常 587）</string>
+    <string name="label_ssl">使用 STARTTLS 加密（非 SSL）</string>
+    <string name="hint_account_name">账户备注名（可选，如「学校邮箱」）</string>
 </resources>

@@ -33,7 +33,6 @@ public class MailService {
     public static List<MailMessage> fetchAll(Context ctx, List<MailAccount> accounts) {
         List<MailMessage> out = new ArrayList<>();
         for (MailAccount a : accounts) {
-            if (a.id.startsWith("demo-")) continue;
             try {
                 out.addAll(fetchOne(ctx, a));
             } catch (Exception e) {
@@ -58,11 +57,19 @@ public class MailService {
 
     private static List<MailMessage> fetchOne(Context ctx, MailAccount a) throws MessagingException {
         Properties p = new Properties();
-        p.put("mail.store.protocol", "imaps");
-        p.put("mail.imaps.host", a.imapHost);
-        p.put("mail.imaps.port", String.valueOf(a.imapPort));
+        String proto;
+        if (a.useStartTls) {
+            proto = "imap";
+            p.put("mail.imap.starttls.enable", "true");
+            p.put("mail.imap.starttls.required", "true");
+        } else {
+            proto = "imaps";
+        }
+        p.put("mail.store.protocol", proto);
+        p.put("mail." + proto + ".host", a.imapHost);
+        p.put("mail." + proto + ".port", String.valueOf(a.imapPort));
         Session s = session(p, a);
-        Store store = s.getStore("imaps");
+        Store store = s.getStore(proto);
         store.connect();
         Folder inbox = store.getFolder("INBOX");
         inbox.open(Folder.READ_ONLY);
@@ -111,11 +118,19 @@ public class MailService {
         if (a == null || msgNum <= 0) return;
         try {
             Properties p = new Properties();
-            p.put("mail.store.protocol", "imaps");
-            p.put("mail.imaps.host", a.imapHost);
-            p.put("mail.imaps.port", String.valueOf(a.imapPort));
+            String proto;
+            if (a.useStartTls) {
+                proto = "imap";
+                p.put("mail.imap.starttls.enable", "true");
+                p.put("mail.imap.starttls.required", "true");
+            } else {
+                proto = "imaps";
+            }
+            p.put("mail.store.protocol", proto);
+            p.put("mail." + proto + ".host", a.imapHost);
+            p.put("mail." + proto + ".port", String.valueOf(a.imapPort));
             Session s = session(p, a);
-            Store store = s.getStore("imaps");
+            Store store = s.getStore(proto);
             store.connect();
             Folder inbox = store.getFolder("INBOX");
             inbox.open(Folder.READ_WRITE);

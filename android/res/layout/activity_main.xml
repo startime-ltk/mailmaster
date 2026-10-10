@@ -95,6 +95,38 @@
             android:background="@drawable/bg_search"
             android:singleLine="true" />
 
+        <!-- 筛选栏：账户下拉 + 横滑分类 chip（收件箱默认拦截推广） -->
+        <LinearLayout
+            android:id="@+id/filter_bar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingLeft="10dp"
+            android:paddingRight="10dp"
+            android:paddingBottom="4dp">
+
+            <Spinner
+                android:id="@+id/spinner_account"
+                android:layout_width="match_parent"
+                android:layout_height="38dp"
+                android:layout_marginBottom="6dp"
+                android:background="@drawable/bg_search"
+                android:paddingLeft="12dp"
+                android:paddingRight="12dp" />
+
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:id="@+id/chip_row"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal" />
+            </HorizontalScrollView>
+        </LinearLayout>
+
         <!-- 卡片式列表：分隔交给 item 自身留白，不再用通栏分割线 -->
         <ListView
             android:id="@+id/list"

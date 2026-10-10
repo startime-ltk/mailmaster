@@ -7,12 +7,14 @@ import android.graphics.drawable.GradientDrawable;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.text.Editable;
+import android.text.InputType;
 import android.text.TextWatcher;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ListView;
@@ -35,10 +37,22 @@ public class MainActivity extends Activity {
     private TextView subtitle;
     private EditText search;
     private ArrayAdapter<MailMessage> adapter;
-    /** 账户管理弹窗引用，删除账户后用于关闭并重建 */
     private android.app.AlertDialog accountDialog;
-    /** 当前全量邮件（未过滤），搜索时从这里筛选 */
+
+    /** 当前全量邮件（未过滤），搜索/筛选时从这里派生 */
     private List<MailMessage> all = new ArrayList<>();
+    /** 疑似推广邮件总数（用于拦截视图角标），每次拉取刷新 */
+    private int promoTotal = 0;
+
+    /** 筛选状态 */
+    private String curMode = "inbox";     // inbox（收件箱，自动拦截推广）| block（疑似骚扰拦截）
+    private String curAccount = "all";    // all | 具体账户 id
+    private String curCat = "all";        // all | 重要 | 社交 | 其他
+
+    /** chip 引用，用于切换选中态 */
+    private TextView chipInbox, chipBlock;
+    private TextView chipAll, chipImportant, chipSocial, chipOther;
+    private Spinner spinnerAccount;
 
     /** 头像色板：按发件人地址哈希取色，同一个人永远同色 */
     private static final int[] AVATAR_COLORS = {
@@ -55,26 +69,16 @@ public class MainActivity extends Activity {
         list = findViewById(R.id.list);
         search = findViewById(R.id.et_search);
 
-        // 列表为空时显示提示（搜索无结果等）
         list.setEmptyView(findViewById(R.id.tv_empty));
 
         bindToolbar();
         bindFab();
+        buildChips();
 
-        // 输入即筛选：跨账户统一搜索
         search.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-            }
-
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-                applyFilter();
-            }
-
-            @Override
-            public void afterTextChanged(Editable s) {
-            }
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) { applyFilter(); }
+            @Override public void afterTextChanged(Editable s) {}
         });
 
         refresh();
@@ -86,7 +90,6 @@ public class MainActivity extends Activity {
                 if (m == null) return;
                 Intent it = new Intent(MainActivity.this, MessageActivity.class);
                 it.putExtra("msg", m);
-                // 用 ForResult 打开：详情页标记为已读后，回到列表要立刻生效
                 startActivityForResult(it, REQ_OPEN);
             }
         });
@@ -94,26 +97,20 @@ public class MainActivity extends Activity {
 
     private void bindToolbar() {
         findViewById(R.id.btn_compose).setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
+            @Override public void onClick(View v) {
                 startActivity(new Intent(MainActivity.this, ComposeActivity.class));
             }
         });
         findViewById(R.id.btn_refresh).setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                refresh();
-            }
+            @Override public void onClick(View v) { refresh(); }
         });
         findViewById(R.id.btn_more).setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
+            @Override public void onClick(View v) {
                 PopupMenu pm = new PopupMenu(MainActivity.this, v);
                 pm.getMenuInflater().inflate(R.menu.main_menu, pm.getMenu());
                 pm.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
-                    @Override
-                    public boolean onMenuItemClick(MenuItem item) {
-                        return onOptionsItemSelected(item); // 复用既有菜单逻辑
+                    @Override public boolean onMenuItemClick(MenuItem item) {
+                        return onOptionsItemSelected(item);
                     }
                 });
                 pm.show();
@@ -123,8 +120,7 @@ public class MainActivity extends Activity {
 
     private void bindFab() {
         findViewById(R.id.fab).setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
+            @Override public void onClick(View v) {
                 startActivity(new Intent(MainActivity.this, ComposeActivity.class));
             }
         });
@@ -133,7 +129,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int req, int res, Intent data) {
         super.onActivityResult(req, res, data);
-        if (req == REQ_OPEN) applyFilter(); // 已读状态变化，重绘列表
+        if (req == REQ_OPEN) applyFilter();
     }
 
     private void refresh() {
@@ -142,15 +138,14 @@ public class MainActivity extends Activity {
             setList(new ArrayList<MailMessage>());
             return;
         }
+        buildAccountSpinner(); // 账户可能变动，重建下拉并保留当前选择
         setEmptyText(getString(R.string.toast_fetch_empty));
         Toast.makeText(this, R.string.toast_refreshing, Toast.LENGTH_SHORT).show();
         new Thread(new Runnable() {
-            @Override
-            public void run() {
+            @Override public void run() {
                 final List<MailMessage> real = MailService.fetchAll(MainActivity.this, store.accounts);
                 runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
+                    @Override public void run() {
                         if (real.isEmpty()) {
                             setList(new ArrayList<MailMessage>());
                             Toast.makeText(MainActivity.this, R.string.toast_fetch_empty, Toast.LENGTH_SHORT).show();
@@ -163,55 +158,73 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    /** 保存全量邮件并套用当前搜索条件 */
+    /** 保存全量邮件并套用当前筛选条件 */
     private void setList(List<MailMessage> msgs) {
         all = new ArrayList<>();
         if (msgs != null) all.addAll(msgs);
+        promoTotal = 0;
+        for (MailMessage m : all) {
+            if (Classifier.PROMO.equals(m.category)) promoTotal++;
+        }
+        refreshFilterUI();
         applyFilter();
     }
 
-    /** 设置空状态提示文字（tv_empty 内的 TextView） */
     private void setEmptyText(String text) {
         TextView t = findViewById(R.id.tv_empty_text);
         if (t != null) t.setText(text);
     }
 
-    /** 标题栏副标题：未读数 + 当前邮箱数，一眼看清收件箱状态 */
-    private void updateSubtitle() {
+    /** 标题栏副标题：按当前视图统计未读 / 拦截数 */
+    private void updateSubtitle(List<MailMessage> shown) {
         int unread = 0;
-        for (MailMessage m : all) {
-            if (m.unread) unread++;
+        for (MailMessage m : shown) if (m.unread) unread++;
+        String status;
+        if (curMode.equals("block")) {
+            status = "拦截 " + shown.size() + " 封疑似推广";
+        } else {
+            status = (unread > 0) ? (getString(R.string.unread_hint) + " " + unread + " 封") : "全部已读";
         }
-        String status = (unread > 0)
-                ? getString(R.string.unread_hint) + " " + unread + " 封"
-                : "全部已读";
         String mode = store.accounts.isEmpty() ? "未添加邮箱" : (store.accounts.size() + " 个邮箱");
         subtitle.setText(status + " · " + mode);
     }
 
     /**
-     * 跨账户统一搜索：一次搜索所有已录入邮箱，
-     * 匹配范围 = 主题 + 发件人 + 正文 + 所属邮箱地址。
+     * 统一筛选：模式（收件箱拦截推广 / 拦截视图只显推广）
+     * + 账户 + 分类 + 关键词搜索，四者取交集。
      */
     private void applyFilter() {
         String q = search.getText().toString().trim().toLowerCase(Locale.CHINA);
-        if (q.length() > 0) setEmptyText(getString(R.string.search_no_result));
         List<MailMessage> shown = new ArrayList<>();
         for (int i = 0; i < all.size(); i++) {
             MailMessage m = all.get(i);
-            if (q.length() == 0 || match(m, q)) shown.add(m);
+            // 1) 模式：收件箱隐藏推广，拦截视图只显推广
+            boolean isPromo = Classifier.PROMO.equals(m.category);
+            if (curMode.equals("inbox") && isPromo) continue;
+            if (curMode.equals("block") && !isPromo) continue;
+            // 2) 账户
+            if (!curAccount.equals("all") && !curAccount.equals(m.accountId)) continue;
+            // 3) 分类（仅收件箱模式生效；拦截视图本身就是推广）
+            if (curMode.equals("inbox") && !curCat.equals("all") && !curCat.equals(m.category)) continue;
+            // 4) 搜索
+            if (q.length() > 0 && !match(m, q)) continue;
+            shown.add(m);
         }
 
+        if (shown.isEmpty()) {
+            if (q.length() > 0) setEmptyText(getString(R.string.search_no_result));
+            else if (curMode.equals("block")) setEmptyText(getString(R.string.empty_block));
+            else setEmptyText(getString(R.string.empty_inbox));
+        }
+
+        final List<MailMessage> finalShown = shown;
         adapter = new ArrayAdapter<MailMessage>(this, R.layout.item_message, R.id.tv_subject, shown) {
             @Override
             public View getView(int pos, View cv, android.view.ViewGroup parent) {
-                if (cv == null) {
-                    cv = getLayoutInflater().inflate(R.layout.item_message, parent, false);
-                }
+                if (cv == null) cv = getLayoutInflater().inflate(R.layout.item_message, parent, false);
                 MailMessage m = getItem(pos);
                 float dp = getResources().getDisplayMetrics().density;
 
-                // 头像：发件人首字 + 按地址取色；未读彩色、已读置灰
                 TextView av = cv.findViewById(R.id.tv_avatar);
                 av.setText(avatarText(m.from));
                 GradientDrawable circle = new GradientDrawable();
@@ -219,7 +232,6 @@ public class MainActivity extends Activity {
                 circle.setColor(m.unread ? avatarColor(m.from) : getResources().getColor(R.color.avatar_read));
                 av.setBackground(circle);
 
-                // 未读主题加粗、颜色更深；已读常规
                 TextView subj = cv.findViewById(R.id.tv_subject);
                 subj.setText(m.subject);
                 subj.setTypeface(null, m.unread ? Typeface.BOLD : Typeface.NORMAL);
@@ -230,14 +242,10 @@ public class MainActivity extends Activity {
                 String when = (m.date > 0) ? sdf.format(new Date(m.date)) : "";
                 ((TextView) cv.findViewById(R.id.tv_date)).setText(when + " · " + m.accountEmail);
 
-                // 有附件时显示文档图标 + 数量
                 TextView att = cv.findViewById(R.id.tv_attach);
                 att.setVisibility(m.hasAttachment() ? View.VISIBLE : View.GONE);
-                if (m.hasAttachment()) {
-                    att.setText("附件 ×" + m.attachments.size());
-                }
+                if (m.hasAttachment()) att.setText("附件 ×" + m.attachments.size());
 
-                // 智能分类标签：圆角彩色胶囊
                 TextView cat = cv.findViewById(R.id.tv_category);
                 String c = m.category;
                 if (c == null || c.length() == 0) {
@@ -254,10 +262,9 @@ public class MainActivity extends Activity {
             }
         };
         list.setAdapter(adapter);
-        updateSubtitle();
+        updateSubtitle(finalShown);
     }
 
-    /** 取发件人显示名的首字符（中文一个字、英文一个字母），空名回退邮箱前缀首字母 */
     static String avatarText(String from) {
         String name = (from == null) ? "" : from.trim();
         int lt = name.indexOf('<');
@@ -270,11 +277,10 @@ public class MainActivity extends Activity {
         return new String(Character.toChars(name.codePointAt(0))).toUpperCase(Locale.CHINA);
     }
 
-    /** 头像颜色 = 色板[hash % 长度]，同一个人在列表任何位置都同色 */
     static int avatarColor(String from) {
         String key = (from == null) ? "" : from;
         int h = key.hashCode();
-        if (h == Integer.MIN_VALUE) h = 42; // abs(MIN_VALUE) 会溢出，先转正
+        if (h == Integer.MIN_VALUE) h = 42;
         return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
     }
 
@@ -285,7 +291,6 @@ public class MainActivity extends Activity {
                 || (m.accountEmail != null && m.accountEmail.toLowerCase(Locale.CHINA).contains(q));
     }
 
-    /** 分类标签配色 */
     private int colorOf(String c) {
         if (Classifier.PROMO.equals(c)) return R.color.cat_promo;
         if (Classifier.SOCIAL.equals(c)) return R.color.cat_social;
@@ -293,28 +298,151 @@ public class MainActivity extends Activity {
         return R.color.cat_important;
     }
 
+    /* ------------------------- 账户下拉 ------------------------- */
+
+    private void buildAccountSpinner() {
+        if (spinnerAccount == null) spinnerAccount = findViewById(R.id.spinner_account);
+        List<String> items = new ArrayList<>();
+        items.add(getString(R.string.filter_account_all));
+        for (MailAccount a : store.accounts) items.add(a.label());
+        ArrayAdapter<String> sa = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_item, items);
+        sa.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spinnerAccount.setAdapter(sa);
+
+        // 当前选择若已失效（账户被删）则回退到全部
+        int sel = 0;
+        if (!curAccount.equals("all")) {
+            for (int i = 0; i < store.accounts.size(); i++) {
+                if (store.accounts.get(i).id.equals(curAccount)) { sel = i + 1; break; }
+            }
+            if (sel == 0) curAccount = "all";
+        }
+        final int finalSel = sel;
+        spinnerAccount.setSelection(finalSel);
+        spinnerAccount.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                curAccount = (position == 0) ? "all" : store.accounts.get(position - 1).id;
+                applyFilter();
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        });
+    }
+
+    /* ------------------------- 分类 chip ------------------------- */
+
+    private int dp(int n) {
+        return (int) (n * getResources().getDisplayMetrics().density);
+    }
+
+    private TextView makeChip(String text) {
+        TextView tv = new TextView(this);
+        tv.setText(text);
+        tv.setTextSize(13);
+        tv.setPadding(dp(12), dp(7), dp(12), dp(7));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.rightMargin = dp(8);
+        tv.setLayoutParams(lp);
+        tv.setBackgroundResource(R.drawable.bg_chip);
+        tv.setTextColor(getResources().getColor(R.color.sub));
+        return tv;
+    }
+
+    private void setChipSelected(TextView tv, boolean sel) {
+        tv.setBackgroundResource(sel ? R.drawable.bg_chip_sel : R.drawable.bg_chip);
+        tv.setTextColor(sel ? 0xFFFFFFFF : getResources().getColor(R.color.sub));
+    }
+
+    private void buildChips() {
+        LinearLayout row = findViewById(R.id.chip_row);
+        row.removeAllViews();
+
+        chipInbox = makeChip(getString(R.string.filter_inbox));
+        chipInbox.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                curMode = "inbox";
+                refreshFilterUI();
+                applyFilter();
+            }
+        });
+        row.addView(chipInbox);
+
+        chipBlock = makeChip(getString(R.string.filter_block));
+        chipBlock.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                curMode = "block";
+                refreshFilterUI();
+                applyFilter();
+            }
+        });
+        row.addView(chipBlock);
+
+        // 分隔
+        TextView gap = new TextView(this);
+        gap.setLayoutParams(new LinearLayout.LayoutParams(dp(4), LinearLayout.LayoutParams.WRAP_CONTENT));
+        row.addView(gap);
+
+        // 分类 chip（仅收件箱模式有意义；拦截视图本身就是推广）
+        chipAll = makeChip(getString(R.string.filter_all));
+        chipAll.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { curCat = "all"; refreshFilterUI(); applyFilter(); }
+        });
+        row.addView(chipAll);
+
+        chipImportant = makeChip(getString(R.string.filter_important));
+        chipImportant.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { curCat = Classifier.IMPORTANT; refreshFilterUI(); applyFilter(); }
+        });
+        row.addView(chipImportant);
+
+        chipSocial = makeChip(getString(R.string.filter_social));
+        chipSocial.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { curCat = Classifier.SOCIAL; refreshFilterUI(); applyFilter(); }
+        });
+        row.addView(chipSocial);
+
+        chipOther = makeChip(getString(R.string.filter_other));
+        chipOther.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { curCat = Classifier.OTHER; refreshFilterUI(); applyFilter(); }
+        });
+        row.addView(chipOther);
+
+        refreshFilterUI();
+    }
+
+    private void refreshFilterUI() {
+        setChipSelected(chipInbox, curMode.equals("inbox"));
+        setChipSelected(chipBlock, curMode.equals("block"));
+        chipBlock.setText(getString(R.string.filter_block) + " (" + promoTotal + ")");
+
+        boolean inbox = curMode.equals("inbox");
+        int vis = inbox ? View.VISIBLE : View.GONE;
+        chipAll.setVisibility(vis);
+        chipImportant.setVisibility(vis);
+        chipSocial.setVisibility(vis);
+        chipOther.setVisibility(vis);
+
+        setChipSelected(chipAll, inbox && curCat.equals("all"));
+        setChipSelected(chipImportant, inbox && curCat.equals(Classifier.IMPORTANT));
+        setChipSelected(chipSocial, inbox && curCat.equals(Classifier.SOCIAL));
+        setChipSelected(chipOther, inbox && curCat.equals(Classifier.OTHER));
+    }
+
+    /* ------------------------- 菜单 ------------------------- */
+
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         if (item.getItemId() == R.id.menu_compose) {
             startActivity(new Intent(this, ComposeActivity.class));
             return true;
         }
-        if (item.getItemId() == R.id.menu_add) {
-            showAddDialog();
-            return true;
-        }
-        if (item.getItemId() == R.id.menu_refresh) {
-            refresh();
-            return true;
-        }
-        if (item.getItemId() == R.id.menu_accounts) {
-            showAccountsDialog();
-            return true;
-        }
+        if (item.getItemId() == R.id.menu_add) { showAddDialog(); return true; }
+        if (item.getItemId() == R.id.menu_refresh) { refresh(); return true; }
+        if (item.getItemId() == R.id.menu_accounts) { showAccountsDialog(); return true; }
         return super.onOptionsItemSelected(item);
     }
 
-    /** 管理账户：列出所有已录入账户，可逐个删除 */
     private void showAccountsDialog() {
         AlertDialog.Builder b = new AlertDialog.Builder(this);
         b.setTitle(R.string.manage_accounts_title);
@@ -331,18 +459,19 @@ public class MainActivity extends Activity {
             row.setOrientation(LinearLayout.HORIZONTAL);
             TextView tv = new TextView(this);
             String name = (a.displayName != null && !a.displayName.isEmpty()) ? a.displayName + " " : "";
-            tv.setText(name + a.email + "  ·  " + a.provider);
+            String prov = ("CUSTOM".equals(a.provider)) ? "自定义" : a.provider;
+            tv.setText(name + a.label() + "  ·  " + prov);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1);
             tv.setLayoutParams(lp);
             Button del = new Button(this);
             del.setText(R.string.btn_delete);
             del.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
+                @Override public void onClick(View v) {
                     store.removeAccount(a.id);
                     if (accountDialog != null) accountDialog.dismiss();
+                    curAccount = "all";
                     refresh();
-                    showAccountsDialog(); // 删完重建列表
+                    showAccountsDialog();
                 }
             });
             row.addView(tv);
@@ -363,7 +492,7 @@ public class MainActivity extends Activity {
         lay.setPadding(40, 30, 40, 10);
 
         final Spinner sp = new Spinner(this);
-        final String[] provs = {"QQ", "163", "OUTLOOK"};
+        final String[] provs = {"QQ", "163", "OUTLOOK", "CUSTOM"};
         ArrayAdapter<String> sa = new ArrayAdapter<>(this,
                 android.R.layout.simple_spinner_item, provs);
         sa.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
@@ -371,27 +500,68 @@ public class MainActivity extends Activity {
 
         final EditText email = new EditText(this);
         email.setHint(R.string.hint_email);
-        email.setInputType(android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
+        email.setInputType(InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
         final EditText pw = new EditText(this);
         pw.setHint(R.string.hint_auth);
 
-        lay.addView(sp);
-        lay.addView(email);
-        lay.addView(pw);
+        // 自定义邮箱高级字段（默认隐藏）
+        final LinearLayout customBox = new LinearLayout(this);
+        customBox.setOrientation(LinearLayout.VERTICAL);
+        customBox.setVisibility(View.GONE);
+        final EditText etName = new EditText(this); etName.setHint(R.string.hint_account_name);
+        final EditText etImapH = new EditText(this); etImapH.setHint(R.string.hint_imap_host);
+        final EditText etImapP = new EditText(this); etImapP.setHint(R.string.hint_imap_port);
+        etImapP.setInputType(InputType.TYPE_CLASS_NUMBER);
+        final EditText etSmtpH = new EditText(this); etSmtpH.setHint(R.string.hint_smtp_host);
+        final EditText etSmtpP = new EditText(this); etSmtpP.setHint(R.string.hint_smtp_port);
+        etSmtpP.setInputType(InputType.TYPE_CLASS_NUMBER);
+        final CheckBox chkTls = new CheckBox(this); chkTls.setText(R.string.label_ssl);
+        customBox.addView(etName); customBox.addView(etImapH); customBox.addView(etImapP);
+        customBox.addView(etSmtpH); customBox.addView(etSmtpP); customBox.addView(chkTls);
+
+        sp.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                customBox.setVisibility(position == 3 ? View.VISIBLE : View.GONE);
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        });
+
+        lay.addView(sp); lay.addView(email); lay.addView(pw); lay.addView(customBox);
         b.setView(lay);
 
         b.setPositiveButton(R.string.btn_save, new android.content.DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(android.content.DialogInterface d, int w) {
+            @Override public void onClick(android.content.DialogInterface d, int w) {
                 String p = provs[sp.getSelectedItemPosition()];
-                MailAccount a = MailAccount.preset(p, email.getText().toString().trim(),
-                        pw.getText().toString().trim());
+                String em = email.getText().toString().trim();
+                String pass = pw.getText().toString().trim();
+                MailAccount a;
+                if ("CUSTOM".equals(p)) {
+                    String ih = etImapH.getText().toString().trim();
+                    String sh = etSmtpH.getText().toString().trim();
+                    boolean tls = chkTls.isChecked();
+                    int ip = parsePort(etImapP.getText().toString(), tls ? 143 : 993);
+                    int sp2 = parsePort(etSmtpP.getText().toString(), tls ? 587 : 465);
+                    a = MailAccount.presetCustom(em, pass, ih, ip, sh, sp2, tls);
+                    a.name = etName.getText().toString().trim();
+                } else {
+                    a = MailAccount.preset(p, em, pass);
+                }
                 store.addAccount(MainActivity.this, a);
+                curAccount = "all";
                 refresh();
                 Toast.makeText(MainActivity.this, R.string.toast_added, Toast.LENGTH_LONG).show();
             }
         });
         b.setNegativeButton("取消", null);
         b.show();
+    }
+
+    private int parsePort(String s, int fallback) {
+        try {
+            int v = Integer.parseInt(s.trim());
+            return (v > 0 && v <= 65535) ? v : fallback;
+        } catch (Exception e) {
+            return fallback;
+        }
     }
 }
