@@ -1,9 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">邮箱大师</string>
-    <string name="demo_banner">演示模式 · 示例数据（未连接真实邮箱）</string>
     <string name="menu_add_account">添加账户</string>
-    <string name="menu_toggle_demo">切换演示</string>
     <string name="add_account_title">添加邮箱账户</string>
     <string name="hint_email">邮箱地址</string>
     <string name="hint_auth">授权码（非登录密码）</string>
@@ -13,11 +11,9 @@
     <string name="hint_body">正文</string>
     <string name="btn_send">发送</string>
     <string name="sending">正在发送…</string>
-    <string name="send_ok">已发送（演示模式·模拟）</string>
     <string name="send_real_ok">已真实发送</string>
     <string name="send_fail">发送失败，请检查授权码/网络</string>
-    <string name="toast_added">已添加，演示模式已退出</string>
-    <string name="toast_need_real_account">请先添加真实邮箱账户</string>
+    <string name="toast_added">已添加账户</string>
     <string name="hint_search">搜索全部邮箱（主题 / 发件人 / 正文）</string>
     <string name="search_no_result">没有匹配的邮件</string>
     <string name="toast_fill_to">请填写收件人</string>
@@ -46,4 +42,5 @@
     <string name="content_compose">写邮件</string>
     <string name="content_refresh">刷新</string>
     <string name="content_more">更多</string>
+    <string name="empty_no_account">还没有添加邮箱\n点右下角 + 或右上角 ⋯ 添加账户</string>
 </resources>

@@ -32,7 +32,6 @@ public class MainActivity extends Activity {
     private static final int REQ_OPEN = 2001;
 
     private ListView list;
-    private TextView banner;
     private TextView subtitle;
     private EditText search;
     private ArrayAdapter<MailMessage> adapter;
@@ -52,7 +51,6 @@ public class MainActivity extends Activity {
         super.onCreate(b);
         setContentView(R.layout.activity_main);
         store.init(this);
-        banner = findViewById(R.id.banner);
         subtitle = findViewById(R.id.tv_subtitle);
         list = findViewById(R.id.list);
         search = findViewById(R.id.et_search);
@@ -139,26 +137,12 @@ public class MainActivity extends Activity {
     }
 
     private void refresh() {
-        banner.setVisibility(store.demoMode ? View.VISIBLE : View.GONE);
-        if (store.demoMode) {
-            // 演示模式：只显示当前仍存在的演示账户邮件，删掉的账户不再出现
-            List<MailAccount> demos = new ArrayList<>();
-            for (MailAccount a : store.accounts) {
-                if (a.id != null && a.id.startsWith("demo-")) demos.add(a);
-            }
-            List<MailMessage> demo = DemoData.messages(this);
-            if (demos.isEmpty()) {
-                setList(new ArrayList<MailMessage>());
-            } else {
-                List<MailMessage> filtered = new ArrayList<>();
-                for (MailMessage m : demo) {
-                    if (demoAccountExists(demos, m.accountEmail)) filtered.add(m);
-                }
-                setList(filtered);
-            }
+        if (store.accounts.isEmpty()) {
+            setEmptyText(getString(R.string.empty_no_account));
+            setList(new ArrayList<MailMessage>());
             return;
         }
-        // 真实模式：绝不再回退到演示邮件；收取为空/失败就显示空列表
+        setEmptyText(getString(R.string.toast_fetch_empty));
         Toast.makeText(this, R.string.toast_refreshing, Toast.LENGTH_SHORT).show();
         new Thread(new Runnable() {
             @Override
@@ -179,15 +163,6 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    /** 该邮箱地址是否仍属于某个演示账户 */
-    private boolean demoAccountExists(List<MailAccount> demos, String email) {
-        if (email == null) return false;
-        for (MailAccount a : demos) {
-            if (email.equals(a.email)) return true;
-        }
-        return false;
-    }
-
     /** 保存全量邮件并套用当前搜索条件 */
     private void setList(List<MailMessage> msgs) {
         all = new ArrayList<>();
@@ -195,7 +170,13 @@ public class MainActivity extends Activity {
         applyFilter();
     }
 
-    /** 标题栏副标题：未读数 + 当前模式，一眼看清收件箱状态 */
+    /** 设置空状态提示文字（tv_empty 内的 TextView） */
+    private void setEmptyText(String text) {
+        TextView t = findViewById(R.id.tv_empty_text);
+        if (t != null) t.setText(text);
+    }
+
+    /** 标题栏副标题：未读数 + 当前邮箱数，一眼看清收件箱状态 */
     private void updateSubtitle() {
         int unread = 0;
         for (MailMessage m : all) {
@@ -204,7 +185,7 @@ public class MainActivity extends Activity {
         String status = (unread > 0)
                 ? getString(R.string.unread_hint) + " " + unread + " 封"
                 : "全部已读";
-        String mode = store.demoMode ? "演示模式" : (store.accounts.size() + " 个邮箱");
+        String mode = store.accounts.isEmpty() ? "未添加邮箱" : (store.accounts.size() + " 个邮箱");
         subtitle.setText(status + " · " + mode);
     }
 
@@ -214,6 +195,7 @@ public class MainActivity extends Activity {
      */
     private void applyFilter() {
         String q = search.getText().toString().trim().toLowerCase(Locale.CHINA);
+        if (q.length() > 0) setEmptyText(getString(R.string.search_no_result));
         List<MailMessage> shown = new ArrayList<>();
         for (int i = 0; i < all.size(); i++) {
             MailMessage m = all.get(i);
@@ -329,20 +311,10 @@ public class MainActivity extends Activity {
             showAccountsDialog();
             return true;
         }
-        if (item.getItemId() == R.id.menu_demo) {
-            // 没有真实账户时不切到真实模式，否则会去连示例账户的假服务器空等
-            if (store.demoMode && !store.hasRealAccount()) {
-                Toast.makeText(this, R.string.toast_need_real_account, Toast.LENGTH_SHORT).show();
-                return true;
-            }
-            store.demoMode = !store.demoMode;
-            refresh();
-            return true;
-        }
         return super.onOptionsItemSelected(item);
     }
 
-    /** 管理账户：列出所有已录入账户（含演示），可逐个删除 */
+    /** 管理账户：列出所有已录入账户，可逐个删除 */
     private void showAccountsDialog() {
         AlertDialog.Builder b = new AlertDialog.Builder(this);
         b.setTitle(R.string.manage_accounts_title);

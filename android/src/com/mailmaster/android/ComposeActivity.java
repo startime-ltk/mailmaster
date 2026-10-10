@@ -96,13 +96,6 @@ public class ComposeActivity extends Activity {
                 final String bd = body.getText().toString();
                 final List<File> atts = new ArrayList<>(files);
 
-                if (MainActivity.store.demoMode) {
-                    // 演示模式：仅模拟，不联网
-                    Toast.makeText(ComposeActivity.this, R.string.send_ok, Toast.LENGTH_LONG).show();
-                    finish();
-                    return;
-                }
-
                 // 真实发送必须放到子线程：安卓禁止在主线程联网，
                 // 否则会抛 NetworkOnMainThreadException 直接闪退
                 v.setEnabled(false);

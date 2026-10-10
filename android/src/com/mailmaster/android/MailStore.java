@@ -9,13 +9,19 @@ import java.util.List;
 
 /**
  * 账户与邮件的本地存储（SharedPreferences + JSON）。
- * 未录入真实账户时进入演示模式，返回 DemoData。
+ *
+ * 持久化约定（直接关系到「覆盖安装 / 更新」时数据是否保留，勿随意改动）：
+ *  - 文件名固定为 "mailmaster_accounts"，自 v1.0 起一直沿用，改名会导致老用户数据读不到。
+ *  - 账户以 JSON 数组存在 "json" 字段；密码经 AES 加密（见 Crypto），密钥固定不变。
+ *  - 只持久化真实账户，演示账户绝不写入。
+ *  - SharedPreferences 位于应用私有目录，覆盖安装（同包名、同签名）时默认保留，
+ *    因此升级后已录入的邮箱与授权码不会丢失；卸载重装才会清空。
  */
 public class MailStore {
+    /** 持久化锚点：文件名一旦随版本发布就不可改，否则老用户升级后数据清零 */
     private static final String PREFS = "mailmaster_accounts";
 
     public List<MailAccount> accounts = new ArrayList<>();
-    public boolean demoMode = true;
     /** 供附件落盘等场景使用（保存 ApplicationContext，避免持有 Activity 泄漏） */
     private Context ctx;
 
@@ -28,8 +34,8 @@ public class MailStore {
         SharedPreferences sp = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         String raw = sp.getString("json", "");
         if (raw == null || raw.isEmpty()) {
-            demoMode = true;
-            accounts = DemoData.accounts();
+            // 首次启动 / 尚未录入任何邮箱：空收件箱，不再塞演示数据
+            accounts = new ArrayList<>();
             return;
         }
         try {
@@ -50,44 +56,33 @@ public class MailStore {
                 a.useStartTls = o.getBoolean("tls");
                 loaded.add(a);
             }
-            demoMode = loaded.isEmpty();
-            accounts = demoMode ? DemoData.accounts() : loaded;
+            accounts = loaded;
         } catch (Exception e) {
-            demoMode = true;
-            accounts = DemoData.accounts();
+            // 解析失败也不回退到演示数据，避免静默混入示例内容
+            accounts = new ArrayList<>();
         }
     }
 
     public void addAccount(Context ctx, MailAccount a) {
         accounts.add(a);
-        demoMode = false;
         save(ctx);
     }
 
-    /** 删除指定账户（真实或演示均可）；删完后重新判定是否仍是演示模式 */
+    /** 删除指定账户；删除后重新保存 */
     public void removeAccount(String id) {
         List<MailAccount> kept = new ArrayList<>();
         for (MailAccount a : accounts) {
             if (!a.id.equals(id)) kept.add(a);
         }
         accounts = kept;
-        demoMode = !hasRealAccount();
         save(ctx);
-    }
-
-    /** 是否存在真实（非演示）账户 */
-    public boolean hasRealAccount() {
-        for (MailAccount a : accounts) {
-            if (!a.id.startsWith("demo-")) return true;
-        }
-        return false;
     }
 
     public void save(Context ctx) {
         try {
             JSONArray arr = new JSONArray();
             for (MailAccount a : accounts) {
-                if (a.id.startsWith("demo-")) continue; // 不持久化演示账户
+                if (a.id.startsWith("demo-")) continue; // 防御：演示账户不落盘
                 JSONObject o = new JSONObject();
                 o.put("id", a.id);
                 o.put("provider", a.provider);
@@ -108,7 +103,7 @@ public class MailStore {
     }
 
     public List<MailMessage> getInbox() {
-        if (demoMode) return DemoData.messages(ctx);
+        if (accounts.isEmpty()) return new ArrayList<>();
         return MailService.fetchAll(ctx, accounts);
     }
 }

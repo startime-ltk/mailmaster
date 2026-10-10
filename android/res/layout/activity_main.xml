@@ -80,17 +80,6 @@
             </LinearLayout>
         </android.widget.Toolbar>
 
-        <TextView
-            android:id="@+id/banner"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="@color/accent"
-            android:textColor="#FFFFFF"
-            android:padding="8dp"
-            android:textSize="12sp"
-            android:text="@string/demo_banner"
-            android:visibility="gone" />
-
         <!-- 跨账户统一搜索：一次搜索所有已录入邮箱 -->
         <EditText
             android:id="@+id/et_search"
@@ -135,6 +124,7 @@
                 android:contentDescription="@string/no_messages" />
 
             <TextView
+                android:id="@+id/tv_empty_text"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
