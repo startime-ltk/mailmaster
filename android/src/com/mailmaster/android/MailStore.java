@@ -64,6 +64,17 @@ public class MailStore {
         save(ctx);
     }
 
+    /** 删除指定账户（真实或演示均可）；删完后重新判定是否仍是演示模式 */
+    public void removeAccount(String id) {
+        List<MailAccount> kept = new ArrayList<>();
+        for (MailAccount a : accounts) {
+            if (!a.id.equals(id)) kept.add(a);
+        }
+        accounts = kept;
+        demoMode = !hasRealAccount();
+        save(ctx);
+    }
+
     /** 是否存在真实（非演示）账户 */
     public boolean hasRealAccount() {
         for (MailAccount a : accounts) {

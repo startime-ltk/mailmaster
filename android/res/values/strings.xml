@@ -32,7 +32,12 @@
     <string name="toast_no_app">没有可打开该文件的应用</string>
     <string name="toast_attach_pick_fail">读取附件失败</string>
     <string name="menu_refresh">刷新</string>
+    <string name="menu_manage_accounts">管理账户</string>
+    <string name="manage_accounts_title">管理邮箱账户</string>
+    <string name="manage_accounts_empty">还没有账户，点「添加账户」录入真实邮箱</string>
+    <string name="btn_delete">删除</string>
     <string name="toast_refreshing">正在收取…</string>
+    <string name="toast_fetch_empty">未收取到邮件，请检查授权码或网络</string>
     <string name="loading">正在收取邮件…</string>
     <string name="unread_hint">未读</string>
     <string name="bar_title_message">邮件详情</string>

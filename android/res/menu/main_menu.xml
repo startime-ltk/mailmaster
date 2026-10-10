@@ -10,6 +10,9 @@
         android:id="@+id/menu_refresh"
         android:title="@string/menu_refresh" />
     <item
+        android:id="@+id/menu_accounts"
+        android:title="@string/menu_manage_accounts" />
+    <item
         android:id="@+id/menu_demo"
         android:title="@string/menu_toggle_demo" />
 </menu>

@@ -12,6 +12,7 @@ import android.view.MenuItem;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
+import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ListView;
@@ -35,6 +36,8 @@ public class MainActivity extends Activity {
     private TextView subtitle;
     private EditText search;
     private ArrayAdapter<MailMessage> adapter;
+    /** 账户管理弹窗引用，删除账户后用于关闭并重建 */
+    private android.app.AlertDialog accountDialog;
     /** 当前全量邮件（未过滤），搜索时从这里筛选 */
     private List<MailMessage> all = new ArrayList<>();
 
@@ -138,11 +141,24 @@ public class MainActivity extends Activity {
     private void refresh() {
         banner.setVisibility(store.demoMode ? View.VISIBLE : View.GONE);
         if (store.demoMode) {
-            setList(DemoData.messages(this));
+            // 演示模式：只显示当前仍存在的演示账户邮件，删掉的账户不再出现
+            List<MailAccount> demos = new ArrayList<>();
+            for (MailAccount a : store.accounts) {
+                if (a.id != null && a.id.startsWith("demo-")) demos.add(a);
+            }
+            List<MailMessage> demo = DemoData.messages(this);
+            if (demos.isEmpty()) {
+                setList(new ArrayList<MailMessage>());
+            } else {
+                List<MailMessage> filtered = new ArrayList<>();
+                for (MailMessage m : demo) {
+                    if (demoAccountExists(demos, m.accountEmail)) filtered.add(m);
+                }
+                setList(filtered);
+            }
             return;
         }
-        // 真实模式：先展示示例，后台拉取真实邮件
-        setList(DemoData.messages(this));
+        // 真实模式：绝不再回退到演示邮件；收取为空/失败就显示空列表
         Toast.makeText(this, R.string.toast_refreshing, Toast.LENGTH_SHORT).show();
         new Thread(new Runnable() {
             @Override
@@ -151,11 +167,25 @@ public class MainActivity extends Activity {
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        setList(real.isEmpty() ? DemoData.messages(MainActivity.this) : real);
+                        if (real.isEmpty()) {
+                            setList(new ArrayList<MailMessage>());
+                            Toast.makeText(MainActivity.this, R.string.toast_fetch_empty, Toast.LENGTH_SHORT).show();
+                        } else {
+                            setList(real);
+                        }
                     }
                 });
             }
         }).start();
+    }
+
+    /** 该邮箱地址是否仍属于某个演示账户 */
+    private boolean demoAccountExists(List<MailAccount> demos, String email) {
+        if (email == null) return false;
+        for (MailAccount a : demos) {
+            if (email.equals(a.email)) return true;
+        }
+        return false;
     }
 
     /** 保存全量邮件并套用当前搜索条件 */
@@ -295,6 +325,10 @@ public class MainActivity extends Activity {
             refresh();
             return true;
         }
+        if (item.getItemId() == R.id.menu_accounts) {
+            showAccountsDialog();
+            return true;
+        }
         if (item.getItemId() == R.id.menu_demo) {
             // 没有真实账户时不切到真实模式，否则会去连示例账户的假服务器空等
             if (store.demoMode && !store.hasRealAccount()) {
@@ -306,6 +340,46 @@ public class MainActivity extends Activity {
             return true;
         }
         return super.onOptionsItemSelected(item);
+    }
+
+    /** 管理账户：列出所有已录入账户（含演示），可逐个删除 */
+    private void showAccountsDialog() {
+        AlertDialog.Builder b = new AlertDialog.Builder(this);
+        b.setTitle(R.string.manage_accounts_title);
+        LinearLayout lay = new LinearLayout(this);
+        lay.setOrientation(LinearLayout.VERTICAL);
+        lay.setPadding(40, 20, 40, 20);
+        if (store.accounts.isEmpty()) {
+            TextView empty = new TextView(this);
+            empty.setText(R.string.manage_accounts_empty);
+            lay.addView(empty);
+        }
+        for (final MailAccount a : new ArrayList<>(store.accounts)) {
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            TextView tv = new TextView(this);
+            String name = (a.displayName != null && !a.displayName.isEmpty()) ? a.displayName + " " : "";
+            tv.setText(name + a.email + "  ·  " + a.provider);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1);
+            tv.setLayoutParams(lp);
+            Button del = new Button(this);
+            del.setText(R.string.btn_delete);
+            del.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    store.removeAccount(a.id);
+                    if (accountDialog != null) accountDialog.dismiss();
+                    refresh();
+                    showAccountsDialog(); // 删完重建列表
+                }
+            });
+            row.addView(tv);
+            row.addView(del);
+            lay.addView(row);
+        }
+        b.setView(lay);
+        b.setNegativeButton("关闭", null);
+        accountDialog = b.show();
     }
 
     private void showAddDialog() {
