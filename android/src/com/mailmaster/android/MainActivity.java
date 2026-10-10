@@ -142,8 +142,16 @@ public class MainActivity extends Activity {
         setEmptyText(getString(R.string.toast_fetch_empty));
         Toast.makeText(this, R.string.toast_refreshing, Toast.LENGTH_SHORT).show();
         new Thread(new Runnable() {
-            @Override public void run() {
+            @Override             public void run() {
                 final List<MailMessage> real = MailService.fetchAll(MainActivity.this, store.accounts);
+                // AI 分类：子线程内调用，不阻塞 UI；失败则保留本地规则，不中断
+                try {
+                    AiSettings ai = AiSettings.load(MainActivity.this);
+                    if (Classifier.aiAvailable(ai)) {
+                        Classifier.aiClassifyBatch(real, ai);
+                    }
+                } catch (Exception ignored) {
+                }
                 runOnUiThread(new Runnable() {
                     @Override public void run() {
                         if (real.isEmpty()) {
@@ -440,6 +448,7 @@ public class MainActivity extends Activity {
         if (item.getItemId() == R.id.menu_add) { showAddDialog(); return true; }
         if (item.getItemId() == R.id.menu_refresh) { refresh(); return true; }
         if (item.getItemId() == R.id.menu_accounts) { showAccountsDialog(); return true; }
+        if (item.getItemId() == R.id.menu_ai) { showAiDialog(); return true; }
         return super.onOptionsItemSelected(item);
     }
 
@@ -481,6 +490,59 @@ public class MainActivity extends Activity {
         b.setView(lay);
         b.setNegativeButton("关闭", null);
         accountDialog = b.show();
+    }
+
+    private void showAiDialog() {
+        AlertDialog.Builder b = new AlertDialog.Builder(this);
+        b.setTitle(R.string.ai_settings_title);
+        View v = getLayoutInflater().inflate(R.layout.dialog_ai_settings, null);
+        final CheckBox en = v.findViewById(R.id.ai_enabled);
+        final Spinner prov = v.findViewById(R.id.ai_provider);
+        final EditText key = v.findViewById(R.id.ai_key);
+        final EditText base = v.findViewById(R.id.ai_base);
+        final EditText model = v.findViewById(R.id.ai_model);
+
+        final AiSettings ai = AiSettings.load(this);
+        en.setChecked(ai.enabled);
+        key.setText(ai.apiKey);
+        base.setText(ai.baseUrl);
+        model.setText(ai.model);
+
+        final String[] presets = {"DeepSeek", "OpenAI", "通义千问", "自定义"};
+        ArrayAdapter<String> pa = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_item, presets);
+        pa.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        prov.setAdapter(pa);
+        int sel = 3;
+        if (ai.baseUrl.contains("deepseek")) sel = 0;
+        else if (ai.baseUrl.contains("openai.com")) sel = 1;
+        else if (ai.baseUrl.contains("dashscope")) sel = 2;
+        prov.setSelection(sel);
+
+        prov.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> p, View vv, int pos, long id) {
+                if (pos == 0) { base.setText("https://api.deepseek.com/v1"); model.setText("deepseek-chat"); }
+                else if (pos == 1) { base.setText("https://api.openai.com/v1"); model.setText("gpt-4o-mini"); }
+                else if (pos == 2) { base.setText("https://dashscope.aliyuncs.com/compatible-mode/v1"); model.setText("qwen-plus"); }
+                else if (pos == 3) { base.setText(""); model.setText(""); }
+            }
+            @Override public void onNothingSelected(AdapterView<?> p) {}
+        });
+
+        b.setView(v);
+        b.setPositiveButton(R.string.btn_save, new android.content.DialogInterface.OnClickListener() {
+            @Override public void onClick(android.content.DialogInterface d, int w) {
+                AiSettings s = new AiSettings();
+                s.enabled = en.isChecked();
+                s.apiKey = key.getText().toString().trim();
+                s.baseUrl = base.getText().toString().trim();
+                s.model = model.getText().toString().trim();
+                s.save(MainActivity.this);
+                Toast.makeText(MainActivity.this, R.string.ai_saved, Toast.LENGTH_SHORT).show();
+            }
+        });
+        b.setNegativeButton("取消", null);
+        b.show();
     }
 
     private void showAddDialog() {

@@ -64,4 +64,14 @@
     <string name="hint_smtp_port">SMTP 端口（SSL 通常 465，STARTTLS 通常 587）</string>
     <string name="label_ssl">使用 STARTTLS 加密（非 SSL）</string>
     <string name="hint_account_name">账户备注名（可选，如「学校邮箱」）</string>
+
+    <!-- AI 分类设置 -->
+    <string name="menu_ai">AI 分类设置</string>
+    <string name="ai_settings_title">AI 智能分类</string>
+    <string name="ai_enable_label">启用 AI 分类（关闭则使用本地规则）</string>
+    <string name="ai_provider_label">服务商</string>
+    <string name="hint_api_key">API Key（仅存本机，AES 加密）</string>
+    <string name="label_base_url">API Base URL（OpenAI 兼容，如 https://api.deepseek.com/v1）</string>
+    <string name="label_model">模型名（如 deepseek-chat / gpt-4o-mini）</string>
+    <string name="ai_saved">已保存 AI 设置</string>
 </resources>

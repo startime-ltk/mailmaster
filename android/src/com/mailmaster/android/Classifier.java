@@ -1,14 +1,29 @@
 package com.mailmaster.android;
 
+import android.util.Log;
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 /**
- * 本地智能分类：把邮件分成 重要 / 推广 / 社交 / 其他。
+ * 邮件分类。
  *
- * 设计取舍：
- * - 对标 Gmail 的「重要 / 推广 / 社交」三分法，用户体验熟悉、评委也认；
- * - 但完全用本地规则实现，不调用任何 AI API：
- *     1) 邮件内容不出手机，契合「本地优先、隐私优先」的定位；
- *     2) 零调用成本、零网络依赖，弱网和离线也能用；
- *     3) 规则可解释、可调整，后续想接 AI 只需替换 classify() 的实现。
+ * 两类策略：
+ *  1) 本地规则 classify()：不联网、零成本、隐私优先，弱网/离线也能用；
+ *  2) AI 分类 aiClassifyBatch()：调用用户自填 Key 的大模型（OpenAI 兼容协议），
+ *     对一批邮件统一分类，覆盖本地结果。失败/未配置时自动回退到本地规则，绝不中断流程。
+ *
+ * 推广（PROMO）类邮件由 MainActivity 的「疑似骚扰拦截」视图统一收纳，主收件箱默认不显示。
  */
 public final class Classifier {
 
@@ -16,6 +31,9 @@ public final class Classifier {
     public static final String PROMO = "推广";
     public static final String SOCIAL = "社交";
     public static final String OTHER = "其他";
+
+    /** AI 分类缓存：邮件 id -> 分类，避免每次刷新重复调用烧 token */
+    private static final Map<String, String> AI_CACHE = new HashMap<String, String>();
 
     /** 营销 / 推广 */
     private static final String[] PROMO_SENDER = {
@@ -56,11 +74,7 @@ public final class Classifier {
     };
 
     /**
-     * 判定邮件分类。
-     *
-     * @param from    发件人（已解码）
-     * @param subject 主题（已解码）
-     * @param body    正文（已解码）
+     * 本地规则判定分类。
      */
     public static String classify(String from, String subject, String body) {
         String f = (from == null ? "" : from).toLowerCase();
@@ -68,23 +82,150 @@ public final class Classifier {
         String b = (body == null ? "" : body);
         String all = s + " " + b;
 
-        // 1) 交易/事务类优先：即便来自群发地址也是用户关心的
         if (containsAny(all, TRANSACTION_WORDS)) return IMPORTANT;
-
-        // 2) 推广营销
         if (containsAny(f, PROMO_SENDER) || containsAny(all, PROMO_WORDS)) return PROMO;
-
-        // 3) 社交平台
         if (containsAny(f, SOCIAL_SENDER) || containsAny(all, SOCIAL_WORDS)) return SOCIAL;
-
-        // 4) 重要：学业 / 工作 / 安全
         if (containsAny(f, IMPORTANT_SENDER) || containsAny(all, IMPORTANT_WORDS)) return IMPORTANT;
-
-        // 5) 群发机器人 → 其他（如 GitHub、Coursera 的通知）
         if (containsAny(f, BOT_SENDER)) return OTHER;
-
-        // 6) 其余按个人邮件处理 → 亲友邮件通常更重要
         return IMPORTANT;
+    }
+
+    /** AI 配置是否已可用（启用 + 有 Key） */
+    public static boolean aiAvailable(AiSettings ai) {
+        return ai != null && ai.enabled && ai.apiKey != null && !ai.apiKey.isEmpty();
+    }
+
+    /**
+     * 用大模型对一批邮件分类，覆盖其 category 字段。
+     * 失败（网络/鉴权/解析）时返回 false，调用方保留本地规则结果；已缓存的邮件直接复用旧结果。
+     */
+    public static boolean aiClassifyBatch(List<MailMessage> mails, AiSettings ai) {
+        if (!aiAvailable(ai) || mails == null || mails.isEmpty()) return false;
+        try {
+            // 1) 先填充命中缓存的，收集需要请求 AI 的
+            StringBuilder sb = new StringBuilder();
+            List<Integer> idx = new ArrayList<Integer>();
+            for (int i = 0; i < mails.size(); i++) {
+                MailMessage m = mails.get(i);
+                if (m.id != null && AI_CACHE.containsKey(m.id)) {
+                    m.category = AI_CACHE.get(m.id);
+                    continue;
+                }
+                idx.add(i);
+                sb.append(i + 1).append(". 发件人: ").append(truncate(m.from, 60))
+                  .append(" | 主题: ").append(truncate(m.subject, 80))
+                  .append(" | 正文: ").append(truncate(m.body, 300)).append("\n");
+            }
+            if (idx.isEmpty()) return true; // 全部命中缓存
+
+            // 2) 调 AI
+            String content = callAi(ai, sb.toString());
+            JSONObject root = new JSONObject(content);
+            JSONArray cats = root.optJSONArray("cats");
+            if (cats == null) cats = root.optJSONArray("categories");
+            if (cats == null) cats = firstArray(root);
+            if (cats == null) return false;
+
+            int n = Math.min(idx.size(), cats.length());
+            for (int k = 0; k < n; k++) {
+                int mailIdx = idx.get(k);
+                MailMessage m = mails.get(mailIdx);
+                String c = normalizeCategory(cats.optString(k));
+                if (c == null) c = m.category; // 无法识别则保留本地结果
+                if (m.id != null) AI_CACHE.put(m.id, c);
+                m.category = c;
+            }
+            return true;
+        } catch (Exception e) {
+            Log.e("Classifier", "ai classify failed", e);
+            return false;
+        }
+    }
+
+    /** 真正发起 HTTP 请求，返回模型回复文本（应为 JSON 字符串） */
+    private static String callAi(AiSettings ai, String mailsText) throws Exception {
+        String sys = "你是邮件智能分类器。请把用户提供的每封邮件分到且仅分到以下四类之一："
+                + "重要、推广、社交、其他。规则：交易/订单/验证码/学业/工作/安全通知算「重要」；"
+                + "广告/营销/促销/退订类算「推广」；社交平台通知算「社交」；"
+                + "其余日常或群发通知算「其他」。请只输出一个 JSON，"
+                + "形如 {\"cats\":[\"重要\",\"推广\"]}，数组顺序与邮件编号一一对应，不要任何解释。";
+        String user = "以下是邮件列表（编号 1..N）：\n" + mailsText
+                + "\n请输出对应编号的 cats 数组。";
+
+        JSONObject m1 = new JSONObject();
+        m1.put("role", "system"); m1.put("content", sys);
+        JSONObject m2 = new JSONObject();
+        m2.put("role", "user"); m2.put("content", user);
+        JSONArray messages = new JSONArray();
+        messages.put(m1); messages.put(m2);
+
+        JSONObject body = new JSONObject();
+        body.put("model", ai.model);
+        body.put("messages", messages);
+        body.put("temperature", 0);
+
+        byte[] payload = body.toString().getBytes("UTF-8");
+
+        HttpURLConnection conn = (HttpURLConnection) new URL(ai.endpoint()).openConnection();
+        conn.setRequestMethod("POST");
+        conn.setConnectTimeout(15000);
+        conn.setReadTimeout(30000);
+        conn.setDoOutput(true);
+        conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+        conn.setRequestProperty("Authorization", "Bearer " + ai.apiKey);
+        conn.setRequestProperty("Accept", "application/json");
+        OutputStream os = conn.getOutputStream();
+        os.write(payload);
+        os.flush();
+        os.close();
+
+        int code = conn.getResponseCode();
+        InputStream in = (code >= 200 && code < 300) ? conn.getInputStream() : conn.getErrorStream();
+        BufferedReader br = new BufferedReader(new InputStreamReader(in, "UTF-8"));
+        StringBuilder resp = new StringBuilder();
+        String line;
+        while ((line = br.readLine()) != null) resp.append(line);
+        br.close();
+        conn.disconnect();
+        if (code < 200 || code >= 300) {
+            throw new java.io.IOException("HTTP " + code + " " + resp.toString());
+        }
+
+        JSONObject root = new JSONObject(resp.toString());
+        JSONArray choices = root.optJSONArray("choices");
+        if (choices == null || choices.length() == 0) throw new java.io.IOException("no choices");
+        JSONObject msg = choices.getJSONObject(0).optJSONObject("message");
+        if (msg == null) throw new java.io.IOException("no message");
+        return msg.optString("content", "");
+    }
+
+    /** 把模型返回的分类字符串规范化为四类之一；无法识别返回 null（调用方兜底） */
+    public static String normalizeCategory(String c) {
+        if (c == null) return null;
+        c = c.trim();
+        if (c.contains("重要")) return IMPORTANT;
+        if (c.contains("推广")) return PROMO;
+        if (c.contains("社交")) return SOCIAL;
+        if (c.contains("其他")) return OTHER;
+        return null;
+    }
+
+    private static String truncate(String s, int n) {
+        if (s == null) return "";
+        s = s.replace("\n", " ").replace("\r", " ").trim();
+        return s.length() <= n ? s : s.substring(0, n);
+    }
+
+    /** 取 JSON 对象里第一个数组（兼容模型返回 {"分类":[...]} 等变体） */
+    private static JSONArray firstArray(JSONObject obj) {
+        if (obj == null) return null;
+        Iterator<String> it = obj.keys();
+        while (it.hasNext()) {
+            Object v;
+            try { v = obj.get(it.next()); } catch (Exception e) { continue; }
+            if (v instanceof JSONArray) return (JSONArray) v;
+        }
+        return null;
     }
 
     private static boolean containsAny(String text, String[] keys) {

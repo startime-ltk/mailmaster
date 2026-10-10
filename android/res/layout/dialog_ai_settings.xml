@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <CheckBox
+        android:id="@+id/ai_enabled"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/ai_enable_label"
+        android:textSize="14sp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:text="@string/ai_provider_label"
+        android:textSize="13sp"
+        android:textColor="@color/sub" />
+
+    <Spinner
+        android:id="@+id/ai_provider"
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:layout_marginTop="4dp"
+        android:background="@drawable/bg_search" />
+
+    <EditText
+        android:id="@+id/ai_key"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:hint="@string/hint_api_key"
+        android:inputType="textPassword"
+        android:textSize="14sp" />
+
+    <EditText
+        android:id="@+id/ai_base"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:hint="@string/label_base_url"
+        android:inputType="textUri"
+        android:textSize="14sp" />
+
+    <EditText
+        android:id="@+id/ai_model"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:hint="@string/label_model"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/ai_hint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:text="兼容 OpenAI 协议：DeepSeek / OpenAI / 通义千问 等均可。Key 仅存本机，不上传第三方。"
+        android:textSize="12sp"
+        android:textColor="@color/sub" />
+
+</LinearLayout>
