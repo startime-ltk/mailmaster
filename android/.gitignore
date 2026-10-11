@@ -15,3 +15,6 @@ release.keystore
 
 # 构建临时目录（版本注入时生成的临时 Manifest）
 .buildtmp/
+
+# 本机 AI Key（含个人信息/凭证，绝不提交；构建时由 build_apk.sh 读取注入）
+ai_config.properties

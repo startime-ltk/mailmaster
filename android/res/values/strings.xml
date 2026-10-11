@@ -72,6 +72,11 @@
     <string name="ai_provider_label">服务商</string>
     <string name="hint_api_key">API Key（仅存本机，AES 加密）</string>
     <string name="label_base_url">API Base URL（OpenAI 兼容，如 https://api.deepseek.com/v1）</string>
-    <string name="label_model">模型名（如 deepseek-chat / gpt-4o-mini）</string>
+    <string name="label_model">模型名（如 deepseek-chat / gpt-4o-mini / doubao-seed-2-1-lite-260915）</string>
     <string name="ai_saved">已保存 AI 设置</string>
+    <string name="ai_test">测试连接</string>
+    <string name="ai_test_ok">连接成功，分类正常</string>
+    <string name="ai_test_fail">连接失败：%1$s</string>
+    <string name="ai_provider_doubao">豆包（火山方舟）</string>
+    <string name="ai_note_doubao">豆包需在火山方舟控制台「开通/激活」所选模型服务后才会真正分类；未开通时自动回退本地规则。</string>
 </resources>

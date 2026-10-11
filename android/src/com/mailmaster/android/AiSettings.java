@@ -28,24 +28,44 @@ public class AiSettings {
     public static AiSettings load(Context ctx) {
         AiSettings s = new AiSettings();
         SharedPreferences sp = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
-        s.enabled = sp.getBoolean("enabled", false);
+        // 构建时注入的 key（来自 gitignore 保护的本地文件，不进仓库）；仓库直编时为空
+        String inj = injectedKey(ctx);
+        boolean hasInj = (inj != null && !inj.isEmpty());
+        boolean init = sp.getBoolean("init", false);
+        s.enabled = sp.getBoolean("enabled", hasInj);
         String ek = sp.getString("key", "");
-        s.apiKey = (ek == null || ek.isEmpty()) ? "" : Crypto.decrypt(ek);
+        s.apiKey = (ek != null && !ek.isEmpty()) ? Crypto.decrypt(ek) : inj;
         s.baseUrl = sp.getString("base", DEF_BASE);
         s.model = sp.getString("model", DEF_MODEL);
         if (s.baseUrl == null || s.baseUrl.isEmpty()) s.baseUrl = DEF_BASE;
         if (s.model == null || s.model.isEmpty()) s.model = DEF_MODEL;
+        // 首次运行且有注入 key：默认启用并选用豆包（火山方舟）
+        if (!init && hasInj) {
+            s.baseUrl = "https://ark.cn-beijing.volces.com/api/v3";
+            s.model = "doubao-seed-2-1-lite-260915";
+        }
         return s;
     }
 
     public void save(Context ctx) {
         SharedPreferences sp = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         SharedPreferences.Editor e = sp.edit();
+        e.putBoolean("init", true);
         e.putBoolean("enabled", enabled);
         e.putString("key", (apiKey == null || apiKey.isEmpty()) ? "" : Crypto.encrypt(apiKey));
         e.putString("base", baseUrl);
         e.putString("model", model);
         e.apply();
+    }
+
+    /** 读取构建时注入的 key（R.string.ai_api_key，由 build_apk.sh 从本地文件写入） */
+    private static String injectedKey(Context ctx) {
+        try {
+            String v = ctx.getApplicationContext().getString(R.string.ai_api_key);
+            return (v == null) ? "" : v;
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     /** 拼接完整的 chat/completions 端点 */

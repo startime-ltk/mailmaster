@@ -95,15 +95,20 @@ public final class Classifier {
         return ai != null && ai.enabled && ai.apiKey != null && !ai.apiKey.isEmpty();
     }
 
+    /** AI 单次请求的邮件数上限：正文已截断到 300 字，8 封一批兼顾成功率与延迟 */
+    private static final int AI_BATCH = 8;
+
     /**
      * 用大模型对一批邮件分类，覆盖其 category 字段。
      * 失败（网络/鉴权/解析）时返回 false，调用方保留本地规则结果；已缓存的邮件直接复用旧结果。
+     *
+     * 分批发送：一次塞几十封会撑爆上下文或直接超时，且中途任何一封出错会导致整批作废。
+     * 拆成小批后，单批失败不影响其它批次，且已成功批次的分类结果照样生效。
      */
     public static boolean aiClassifyBatch(List<MailMessage> mails, AiSettings ai) {
         if (!aiAvailable(ai) || mails == null || mails.isEmpty()) return false;
         try {
             // 1) 先填充命中缓存的，收集需要请求 AI 的
-            StringBuilder sb = new StringBuilder();
             List<Integer> idx = new ArrayList<Integer>();
             for (int i = 0; i < mails.size(); i++) {
                 MailMessage m = mails.get(i);
@@ -112,32 +117,50 @@ public final class Classifier {
                     continue;
                 }
                 idx.add(i);
-                sb.append(i + 1).append(". 发件人: ").append(truncate(m.from, 60))
-                  .append(" | 主题: ").append(truncate(m.subject, 80))
-                  .append(" | 正文: ").append(truncate(m.body, 300)).append("\n");
             }
             if (idx.isEmpty()) return true; // 全部命中缓存
 
-            // 2) 调 AI
+            // 2) 分批调用：单批失败不影响其余批次
+            boolean anyOk = false;
+            for (int from = 0; from < idx.size(); from += AI_BATCH) {
+                int to = Math.min(idx.size(), from + AI_BATCH);
+                if (classifyChunk(mails, idx, from, to, ai)) anyOk = true;
+            }
+            return anyOk;
+        } catch (Exception e) {
+            Log.e("Classifier", "ai classify failed", e);
+            return false;
+        }
+    }
+
+    /** 处理 [from, to) 这一段邮件的一次 AI 请求 */
+    private static boolean classifyChunk(List<MailMessage> mails, List<Integer> idx,
+                                         int from, int to, AiSettings ai) {
+        try {
+            StringBuilder sb = new StringBuilder();
+            // 编号对本批从 1 开始，提示词更短、模型更不容易串行
+            for (int k = from; k < to; k++) {
+                MailMessage m = mails.get(idx.get(k).intValue());
+                sb.append(k - from + 1).append(". 发件人: ").append(truncate(m.from, 60))
+                  .append(" | 主题: ").append(truncate(m.subject, 80))
+                  .append(" | 正文: ").append(truncate(m.body, 300)).append("\n");
+            }
+
             String content = callAi(ai, sb.toString());
-            JSONObject root = new JSONObject(content);
-            JSONArray cats = root.optJSONArray("cats");
-            if (cats == null) cats = root.optJSONArray("categories");
-            if (cats == null) cats = firstArray(root);
+            JSONArray cats = parseCats(content);
             if (cats == null) return false;
 
-            int n = Math.min(idx.size(), cats.length());
+            int n = Math.min(to - from, cats.length());
             for (int k = 0; k < n; k++) {
-                int mailIdx = idx.get(k);
-                MailMessage m = mails.get(mailIdx);
+                MailMessage m = mails.get(idx.get(from + k).intValue());
                 String c = normalizeCategory(cats.optString(k));
-                if (c == null) c = m.category; // 无法识别则保留本地结果
+                if (c == null) continue;           // 无法识别则保留本地结果
                 if (m.id != null) AI_CACHE.put(m.id, c);
                 m.category = c;
             }
             return true;
         } catch (Exception e) {
-            Log.e("Classifier", "ai classify failed", e);
+            Log.e("Classifier", "ai chunk failed " + from + "-" + to, e);
             return false;
         }
     }
@@ -226,6 +249,87 @@ public final class Classifier {
             if (v instanceof JSONArray) return (JSONArray) v;
         }
         return null;
+    }
+
+    /**
+     * 解析模型返回的 JSON：尽可能把「不守规矩」的输出也救回来。
+     *
+     * 真实模型（尤其轻量版）常见输出形态，逐级兜底：
+     *  1) {"cats":[...]} / {"categories":[...]} / 任意首个数组；
+     *  2) ```json 代码块包裹、前后带寒暄解释 → 先剥离围栏，再截取首个 JSON 片段；
+     *  3) 完全不是 JSON 的自然语言 → 按出现顺序抽取四类词。
+     *
+     * 宁可多救一层，也别让一次付费请求白费。
+     */
+    private static JSONArray parseCats(String content) {
+        if (content == null) return null;
+
+        // 1) 先原样解析标准 JSON
+        JSONArray a = tryJson(content);
+        if (a != null) return a;
+
+        // 2) 清洗：去掉 ```json 围栏，截取首个 {...} 或 [...] 片段
+        String s = content.trim().replaceAll("(?s)```(?:json|JSON)?", "");
+        int iObj = s.indexOf('{');
+        int iArr = s.indexOf('[');
+        if (iObj >= 0 || iArr >= 0) {
+            int start, end;
+            if (iArr >= 0 && (iObj < 0 || iArr < iObj)) {
+                start = iArr;
+                end = s.lastIndexOf(']');
+            } else {
+                start = iObj;
+                end = s.lastIndexOf('}');
+            }
+            if (end > start) {
+                a = tryJson(s.substring(start, end + 1));
+                if (a != null) return a;
+            }
+        }
+
+        // 3) 最后兜底：自然语言里按顺序抽类别词
+        return extractCatsLoose(content);
+    }
+
+    /** 尝试把字符串解析为「合法且含四类词」的 JSON 数组 */
+    private static JSONArray tryJson(String raw) {
+        try {
+            JSONObject o = new JSONObject(raw);
+            JSONArray a = o.optJSONArray("cats");
+            if (a == null) a = o.optJSONArray("categories");
+            if (a == null) a = firstArray(o);
+            if (a != null) return a;
+        } catch (Exception ignored) {
+        }
+        try {
+            return new JSONArray(raw);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    /** 倒数兜底：从任意文本中按出现顺序抽取 重要/推广/社交/其他 */
+    private static JSONArray extractCatsLoose(String text) {
+        if (text == null || text.isEmpty()) return null;
+        java.util.regex.Matcher mt = java.util.regex.Pattern
+                .compile("重要|推广|社交|其他").matcher(text);
+        JSONArray arr = new JSONArray();
+        while (mt.find()) arr.put(mt.group());
+        return arr.length() == 0 ? null : arr;
+    }
+
+    /**
+     * 测试 AI 连通性：发起一次最小调用，成功返回 null，失败返回错误描述。
+     * 供设置页「测试连接」使用；注意返回 ModelNotOpen 即「账户未开通该模型」。
+     */
+    public static String testConnection(AiSettings ai) {
+        try {
+            callAi(ai, "发件人: test@example.com | 主题: 验证码 | 正文: 您的验证码是 123456");
+            return null;
+        } catch (Exception e) {
+            String m = e.getMessage();
+            return (m == null || m.isEmpty()) ? "未知错误" : m;
+        }
     }
 
     private static boolean containsAny(String text, String[] keys) {

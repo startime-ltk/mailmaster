@@ -508,15 +508,16 @@ public class MainActivity extends Activity {
         base.setText(ai.baseUrl);
         model.setText(ai.model);
 
-        final String[] presets = {"DeepSeek", "OpenAI", "通义千问", "自定义"};
+        final String[] presets = {"DeepSeek", "OpenAI", "通义千问", "豆包（火山方舟）", "自定义"};
         ArrayAdapter<String> pa = new ArrayAdapter<>(this,
                 android.R.layout.simple_spinner_item, presets);
         pa.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         prov.setAdapter(pa);
-        int sel = 3;
+        int sel = 4;
         if (ai.baseUrl.contains("deepseek")) sel = 0;
         else if (ai.baseUrl.contains("openai.com")) sel = 1;
         else if (ai.baseUrl.contains("dashscope")) sel = 2;
+        else if (ai.baseUrl.contains("volces.com")) sel = 3;
         prov.setSelection(sel);
 
         prov.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
@@ -524,7 +525,8 @@ public class MainActivity extends Activity {
                 if (pos == 0) { base.setText("https://api.deepseek.com/v1"); model.setText("deepseek-chat"); }
                 else if (pos == 1) { base.setText("https://api.openai.com/v1"); model.setText("gpt-4o-mini"); }
                 else if (pos == 2) { base.setText("https://dashscope.aliyuncs.com/compatible-mode/v1"); model.setText("qwen-plus"); }
-                else if (pos == 3) { base.setText(""); model.setText(""); }
+                else if (pos == 3) { base.setText("https://ark.cn-beijing.volces.com/api/v3"); model.setText("doubao-seed-2-1-lite-260915"); }
+                else if (pos == 4) { base.setText(""); model.setText(""); }
             }
             @Override public void onNothingSelected(AdapterView<?> p) {}
         });
@@ -542,7 +544,40 @@ public class MainActivity extends Activity {
             }
         });
         b.setNegativeButton("取消", null);
-        b.show();
+        final AlertDialog dlg = b.create();
+        dlg.show();
+        Button testBtn = dlg.findViewById(R.id.ai_test);
+        if (testBtn != null) {
+            testBtn.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View vv) {
+                    AiSettings tmp = new AiSettings();
+                    tmp.enabled = true;
+                    tmp.apiKey = key.getText().toString().trim();
+                    tmp.baseUrl = base.getText().toString().trim();
+                    tmp.model = model.getText().toString().trim();
+                    testBtn.setEnabled(false);
+                    testBtn.setText("测试中…");
+                    new Thread(new Runnable() {
+                        @Override public void run() {
+                            final String err = Classifier.testConnection(tmp);
+                            runOnUiThread(new Runnable() {
+                                @Override public void run() {
+                                    testBtn.setEnabled(true);
+                                    testBtn.setText(R.string.ai_test);
+                                    if (err == null) {
+                                        Toast.makeText(MainActivity.this, R.string.ai_test_ok, Toast.LENGTH_SHORT).show();
+                                    } else {
+                                        String msg = (err.length() > 120) ? (err.substring(0, 120) + "…") : err;
+                                        Toast.makeText(MainActivity.this,
+                                            getString(R.string.ai_test_fail, msg), Toast.LENGTH_LONG).show();
+                                    }
+                                }
+                            });
+                        }
+                    }).start();
+                }
+            });
+        }
     }
 
     private void showAddDialog() {

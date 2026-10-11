@@ -49,6 +49,21 @@ DEBUG_NAME="MailMaster-v${VERSION}-debug.apk"
 RELEASE_NAME="MailMaster-v${VERSION}.apk"
 echo "版本: v$VERSION (versionCode ${VCODE:-?})"
 
+# 生成 AI 配置资源：key 来自 gitignore 保护的本地文件 android/ai_config.properties，绝不进仓库。
+# 仓库直接构建（无该文件）时写入空值，AI 默认关闭，用户可在 App 内自填。
+mkdir -p "$APP/.buildtmp/res/values"
+AI_KEY=""
+if [ -f "$APP/ai_config.properties" ]; then
+  AI_KEY=$(grep -E '^ai_api_key=' "$APP/ai_config.properties" | head -1 | cut -d= -f2-)
+fi
+{
+  echo '<?xml version="1.0" encoding="utf-8"?>'
+  echo '<resources>'
+  echo "    <string name=\"ai_api_key\">$AI_KEY</string>"
+  echo '</resources>'
+} > "$APP/.buildtmp/res/values/ai_config.xml"
+"$AAPT2" compile --dir "$APP/.buildtmp/res" -o "$APP/.buildtmp/ai_compiled.zip"
+
 echo "== 1. 编译资源 =="
 "$AAPT2" compile --dir "$APP/res" -o "$APP/compiled_res.zip"
 
@@ -56,6 +71,7 @@ echo "== 2. 链接资源 + 生成 R.java =="
 "$AAPT2" link -o "$APP/base.apk" -I "$ANDROID_JAR" \
   --manifest "$MANIFEST" \
   -R "$APP/compiled_res.zip" \
+  -R "$APP/.buildtmp/ai_compiled.zip" \
   --java "$APP/gen" --auto-add-overlay
 
 echo "== 3. 编译 Java =="

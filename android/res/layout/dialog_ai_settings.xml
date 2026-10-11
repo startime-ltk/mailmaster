@@ -58,8 +58,25 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
-        android:text="兼容 OpenAI 协议：DeepSeek / OpenAI / 通义千问 等均可。Key 仅存本机，不上传第三方。"
+        android:text="兼容 OpenAI 协议：DeepSeek / OpenAI / 通义千问 / 豆包 等均可。Key 仅存本机，不上传第三方。"
         android:textSize="12sp"
         android:textColor="@color/sub" />
+
+    <TextView
+        android:id="@+id/ai_note_doubao"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:text="@string/ai_note_doubao"
+        android:textSize="12sp"
+        android:textColor="@color/cat_promo" />
+
+    <Button
+        android:id="@+id/ai_test"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="@string/ai_test"
+        android:textSize="14sp" />
 
 </LinearLayout>
