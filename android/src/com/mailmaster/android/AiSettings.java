@@ -39,10 +39,15 @@ public class AiSettings {
         s.model = sp.getString("model", DEF_MODEL);
         if (s.baseUrl == null || s.baseUrl.isEmpty()) s.baseUrl = DEF_BASE;
         if (s.model == null || s.model.isEmpty()) s.model = DEF_MODEL;
-        // 首次运行且有注入 key：默认启用并选用豆包（火山方舟）
-        if (!init && hasInj) {
-            s.baseUrl = "https://ark.cn-beijing.volces.com/api/v3";
-            s.model = "doubao-seed-2-1-lite-260915";
+        // 迁移：旧版注入的是火山方舟（豆包）配置，但该 key 未开通任何模型、已弃用。
+        // 若检测到仍为豆包配置，且有新版注入的 key，则平滑切回 DeepSeek 默认
+        // （只动 AI 配置文件，不触碰邮箱账户与邮件数据，覆盖安装照旧保留）。
+        boolean looksDoubao = s.baseUrl.contains("volces.com") || s.model.startsWith("doubao");
+        if (hasInj && looksDoubao) {
+            s.apiKey = inj;
+            s.baseUrl = DEF_BASE;
+            s.model = DEF_MODEL;
+            s.enabled = true;
         }
         return s;
     }

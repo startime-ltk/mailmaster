@@ -53,8 +53,9 @@
 
 ### v1.8 新增：AI 智能分类
 - **自填 API Key**：菜单「AI 分类设置」可启用开关，选预设服务商（DeepSeek / **豆包·火山方舟** / OpenAI / 通义千问 / 自定义）后填入 Key 即可。也可手填任意 OpenAI 兼容的 `API Base URL` 与 `模型名`。
-- **豆包（火山方舟）注意事项**：API Key 前缀是 `ark-`（控制台复制时容易多带成 `apiark-`，会导致 `key format is incorrect`）；并且**必须在方舟控制台「开通/激活」所选模型服务**后才可用，未开通会返回 `ModelNotOpen`——此时 App 自动回退本地规则。设置页内置「测试连接」可一键自检。
-- **构建期可选注入 Key**：把 Key 写入 `android/ai_config.properties`（已被 `.gitignore` 忽略，绝不进仓库），构建脚本会注入到 `R.string.ai_api_key`，首次启动自动启用豆包预设；仓库直接构建则为空，用户可在 App 内自填。
+- **DeepSeek（默认，已内置 Key）**：OpenAI 兼容协议，`sk-` 前缀 Key 开箱即用，无需在控制台单独开通模型；分类默认走 `deepseek-chat`（服务端自动路由到 deepseek-flash）。设置页内置「测试连接」可一键自检。
+- **豆包（火山方舟）预设说明（如需切换）**：API Key 前缀是 `ark-`（控制台复制时容易多带成 `apiark-`，会导致 `key format is incorrect`）；且**必须在方舟控制台「开通/激活」所选模型**后才可用，未开通返回 `ModelNotOpen`——此时 App 自动回退本地规则。
+- **构建期可选注入 Key**：把 Key 写入 `android/ai_config.properties`（已被 `.gitignore` 忽略，绝不进仓库），构建脚本会注入到 `R.string.ai_api_key`，首次启动自动启用 **DeepSeek 预设**（已内置 key，开箱即用；旧版火山方舟配置升级时也会平滑切回 DeepSeek）；仓库直接构建则为空，用户可在 App 内自填。
 - **分批调用**：每批最多 8 封，避免几十封邮件一次性塞爆上下文或超时；单批失败不影响其它批次，结果仍生效。
 - **仅本机、加密存储**：Key 与其它账户数据一样走 AES 加密，存于独立 SP 文件 `mailmaster_ai`，**不上传任何第三方**（仅调用你指定的大模型服务鉴权用）。
 - **只发必要信息**：调用时仅把「发件人 + 主题 + 截断正文（前 300 字）」发给模型，不传附件、不传账户密码。
