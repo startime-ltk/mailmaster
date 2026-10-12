@@ -34,6 +34,7 @@
     <string name="btn_delete">删除</string>
     <string name="toast_refreshing">正在收取…</string>
     <string name="toast_fetch_empty">未收取到邮件，请检查授权码或网络</string>
+    <string name="toast_offline_cache">网络暂不可用，已显示本地缓存邮件</string>
     <string name="loading">正在收取邮件…</string>
     <string name="unread_hint">未读</string>
     <string name="bar_title_message">邮件详情</string>

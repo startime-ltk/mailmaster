@@ -55,6 +55,37 @@ public class MailService {
         return d;
     }
 
+    /**
+     * 删除某账户的全部附件文件目录（含落盘附件）。
+     * 与 {@link #attachDir} 共用同一路径拼接规则，确保删除路径与写入路径严格一致。
+     * 供 MailCache.deleteAccount 在删除账户缓存邮件时级联调用，避免附件残留。
+     */
+    public static void deleteAccountFiles(Context ctx, String accountId) {
+        if (accountId == null) return;
+        try {
+            File base = null;
+            try {
+                base = ctx.getExternalFilesDir(null);
+            } catch (Exception ignored) {
+            }
+            if (base == null) base = ctx.getFilesDir();
+            File d = new File(base, "attachments/" + accountId);
+            deleteRecursive(d);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static void deleteRecursive(File f) {
+        if (f == null || !f.exists()) return;
+        if (f.isDirectory()) {
+            File[] children = f.listFiles();
+            if (children != null) {
+                for (File c : children) deleteRecursive(c);
+            }
+        }
+        f.delete();
+    }
+
     private static List<MailMessage> fetchOne(Context ctx, MailAccount a) throws MessagingException {
         Properties p = new Properties();
         String proto;

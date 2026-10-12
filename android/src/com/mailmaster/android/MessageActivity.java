@@ -13,6 +13,7 @@ import android.webkit.WebView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+import com.mailmaster.android.MailCache;
 import java.io.File;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -188,10 +189,15 @@ public class MessageActivity extends Activity {
         });
     }
 
-    /** 打开即已读：先改本地状态，真实账户再异步回写服务器 */
+    /** 打开即已读：先改本地状态并同步本地缓存，真实账户再异步回写服务器 */
     private void markRead() {
         if (!msg.unread) return;
         msg.unread = false;
+        // 同步更新本地邮件缓存的未读标记，离线回看时角标才准确
+        try {
+            MailCache.getInstance(MessageActivity.this).markRead(msg.accountId, msg.msgNum);
+        } catch (Exception ignored) {
+        }
         setResult(RESULT_OK);
         final MailAccount acc = findAccount();
         if (acc == null || acc.id.startsWith("demo-") || msg.msgNum <= 0) return;

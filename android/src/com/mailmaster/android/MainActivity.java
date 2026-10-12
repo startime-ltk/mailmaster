@@ -5,6 +5,7 @@ import android.app.AlertDialog;
 import android.content.Intent;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
+import com.mailmaster.android.MailCache;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.text.Editable;
@@ -160,6 +161,14 @@ public class MainActivity extends Activity {
         Toast.makeText(this, R.string.toast_refreshing, Toast.LENGTH_SHORT).show();
         new Thread(new Runnable() {
             @Override             public void run() {
+                // 1) 先读本地缓存即时展示（离线可用、列表秒开）
+                final List<MailMessage> cached = MailCache.getInstance(MainActivity.this).getAll();
+                if (!cached.isEmpty()) {
+                    runOnUiThread(new Runnable() {
+                        @Override public void run() { setList(cached); }
+                    });
+                }
+                // 2) 后台拉取最新邮件
                 final List<MailMessage> real = MailService.fetchAll(MainActivity.this, store.accounts);
                 // AI 分类：子线程内调用，不阻塞 UI；失败则保留本地规则，不中断
                 try {
@@ -171,11 +180,16 @@ public class MainActivity extends Activity {
                 }
                 runOnUiThread(new Runnable() {
                     @Override public void run() {
-                        if (real.isEmpty()) {
+                        if (!real.isEmpty()) {
+                            // 落盘本地缓存，下次离线也能看
+                            MailCache.getInstance(MainActivity.this).upsertAll(real);
+                            setList(real);
+                        } else if (cached.isEmpty()) {
                             setList(new ArrayList<MailMessage>());
                             Toast.makeText(MainActivity.this, R.string.toast_fetch_empty, Toast.LENGTH_SHORT).show();
                         } else {
-                            setList(real);
+                            // 网络拉取为空（断网/无新邮件）但本地有缓存：保留缓存显示
+                            Toast.makeText(MainActivity.this, R.string.toast_offline_cache, Toast.LENGTH_SHORT).show();
                         }
                     }
                 });

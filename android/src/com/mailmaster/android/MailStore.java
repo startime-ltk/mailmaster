@@ -2,6 +2,7 @@ package com.mailmaster.android;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import com.mailmaster.android.MailCache;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.util.ArrayList;
@@ -69,7 +70,7 @@ public class MailStore {
         save(ctx);
     }
 
-    /** 删除指定账户；删除后重新保存 */
+    /** 删除指定账户；删除后重新保存，并级联清除该账户的本地缓存邮件与附件 */
     public void removeAccount(String id) {
         List<MailAccount> kept = new ArrayList<>();
         for (MailAccount a : accounts) {
@@ -77,6 +78,11 @@ public class MailStore {
         }
         accounts = kept;
         save(ctx);
+        // 级联删除：本地邮件缓存 + 落盘附件（防止隐私残留与空间浪费）
+        try {
+            MailCache.getInstance(ctx).deleteAccount(id);
+        } catch (Exception ignored) {
+        }
     }
 
     public void save(Context ctx) {
