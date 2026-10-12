@@ -63,6 +63,10 @@
 - **结果缓存**：按邮件 id 缓存 AI 分类结果，重复刷新不再重复请求，省额度也避免抖动。
 - **与拦截视图无缝融合**：AI 判为「推广」的邮件同样自动进入「疑似骚扰拦截」视图，主收件箱保持干净——AI 只是把分类做更准，拦截策略不变。
 
+### v1.9 / v1.10 新增：AI 切到 DeepSeek + 应用内更新（点击更新）
+- **v1.9**：AI 智能分类默认服务商由火山方舟切换到 **DeepSeek**（OpenAI 兼容协议，开箱即用，不用逐个开通模型）。
+- **v1.10**：菜单「⋯ → 检查更新」联网拉 GitHub Release 的 `update.json`，比对 `versionCode` 后下载最新 APK 并**直接调起系统安装器覆盖安装，全程无需电脑**。
+
 ### v1.5 新增：去掉测试邮箱，只留真实邮箱
 - **真实模式不再回退演示邮件**：收取为空/失败一律显示空列表并提示「检查授权码或网络」，不再偷偷显示示例邮件。
 - **「管理账户」入口**：右上角 ⋯ → 管理账户，可逐个删除已录入账户，删完立即生效。
@@ -200,6 +204,16 @@ adb install MailMaster-v1.6-debug.apk  # 电脑连手机
 # 或把 apk 传到手机，文件管理器点击安装（需开启「允许未知来源」）
 ```
 > 覆盖安装（更新）时只要签名一致，已录入账户数据会原样保留；若提示「签名冲突」，说明 keystore 变了，需先卸载旧版再装。
+
+## 三·五、应用内更新（菜单「检查更新」一键升级）
+App 内「⋯ → 检查更新」会联网查 GitHub Release 上的 `update.json`，
+比对 `versionCode` 后下载最新 APK 并直接调起系统安装器覆盖安装，**全程无需电脑**。
+
+- **更新源**：`github.com/startime-ltk/mailmaster` 的 Releases。打 `v*` tag 时 CI 自动生成 `update.json`（含 `versionCode/versionName/apkUrl/notes`）并作为 Release 附件。
+- **比对依据**：用 `versionCode`（整数，CI 用 `github.run_number` 保证单调递增），避免「1.10 字典序小于 1.9」这类字符串比较的坑。
+- **覆盖安装前提：签名必须一致**。CI 出包用的是你配置的 `RELEASE_KEYSTORE_BASE64` 对应的 keystore；本地手动构建用 `android/debug.keystore`。两者必须是**同一个**，才能保证「已装版本 → 点更新 → 覆盖」不丢账户数据。
+  - 已把本机 `debug.keystore` 的 Base64 作为 `RELEASE_KEYSTORE_BASE64` 配到仓库 Secrets 即可统一（别名 `androiddebugkey`，密码 `android`）。
+- **安卓 8+** 首次更新会跳一次「允许安装未知来源应用」授权，授权后后续自动。
 
 ## 四、诚实说明
 - **已在标准 JVM 上实测通过**：中文编码治理（4 类邮件场景）与本地智能分类（合成邮件）。

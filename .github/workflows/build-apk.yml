@@ -85,11 +85,33 @@ jobs:
           path: android/MailMaster*.apk
           if-no-files-found: error
 
+      - name: 生成 update.json（仅打 tag 时，作为 App 内「检查更新」的更新清单）
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          # 版本号唯一数据源仍是 Manifest；apkUrl 指向本次 Release 上的同名 APK
+          VN=$(sed -n 's/.*android:versionName="\([^"]*\)".*/\1/p' android/AndroidManifest.xml | head -1)
+          VC="${{ github.run_number }}"
+          TAG="${{ github.ref_name }}"
+          APK="MailMaster-v${VN}.apk"
+          URL="https://github.com/startime-ltk/mailmaster/releases/download/${TAG}/${APK}"
+          cat > android/update.json <<JSON
+          {
+            "versionCode": ${VC},
+            "versionName": "${VN}",
+            "apkUrl": "${URL}",
+            "notes": "邮箱大师 v${VN} 自动构建发布",
+            "publishedAt": "${GITHUB_SHA}"
+          }
+          JSON
+          echo "已生成 update.json: versionCode=${VC} versionName=${VN} apk=${APK}"
+
       - name: 打 tag 时创建 Release 并附 APK
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: android/MailMaster*.apk
+          files: |
+            android/MailMaster*.apk
+            android/update.json
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

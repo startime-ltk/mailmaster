@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.text.Editable;
@@ -22,6 +23,12 @@ import android.widget.PopupMenu;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.app.ProgressDialog;
+import android.content.DialogInterface;
+import android.content.pm.PackageInfo;
+import android.os.Build;
+import android.provider.Settings;
+import java.io.File;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -129,7 +136,17 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int req, int res, Intent data) {
         super.onActivityResult(req, res, data);
-        if (req == REQ_OPEN) applyFilter();
+        if (req == REQ_OPEN) {
+            applyFilter();
+        } else if (req == REQ_INSTALL_PERM && pendingUpdate != null) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O
+                    || getPackageManager().canRequestPackageInstalls()) {
+                downloadAndInstall(pendingUpdate);
+            } else {
+                Toast.makeText(this, R.string.no_install_perm, Toast.LENGTH_SHORT).show();
+            }
+            pendingUpdate = null;
+        }
     }
 
     private void refresh() {
@@ -449,7 +466,108 @@ public class MainActivity extends Activity {
         if (item.getItemId() == R.id.menu_refresh) { refresh(); return true; }
         if (item.getItemId() == R.id.menu_accounts) { showAccountsDialog(); return true; }
         if (item.getItemId() == R.id.menu_ai) { showAiDialog(); return true; }
+        if (item.getItemId() == R.id.menu_check_update) { checkUpdate(); return true; }
         return super.onOptionsItemSelected(item);
+    }
+
+    /* ------------------------- 应用内更新 ------------------------- */
+
+    private static final int REQ_INSTALL_PERM = 2003;
+    private Updater.UpdateInfo pendingUpdate;
+
+    private void checkUpdate() {
+        final ProgressDialog pd = new ProgressDialog(this);
+        pd.setMessage(getString(R.string.update_checking));
+        pd.setCancelable(false);
+        pd.show();
+        Updater.checkUpdate(this, new Updater.CheckCallback() {
+            @Override
+            public void onResult(final Updater.UpdateInfo info, final boolean hasUpdate, final String err) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        pd.dismiss();
+                        if (err != null) {
+                            Toast.makeText(MainActivity.this,
+                                    getString(R.string.update_fail, err), Toast.LENGTH_LONG).show();
+                            return;
+                        }
+                        if (!hasUpdate || info == null) {
+                            Toast.makeText(MainActivity.this,
+                                    getString(R.string.update_latest, Updater.currentVersionName(MainActivity.this)),
+                                    Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                        showUpdateDialog(info);
+                    }
+                });
+            }
+        });
+    }
+
+    private void showUpdateDialog(final Updater.UpdateInfo info) {
+        AlertDialog.Builder b = new AlertDialog.Builder(this);
+        b.setTitle(getString(R.string.update_found_title, info.versionName));
+        String msg = (info.notes != null && !info.notes.isEmpty()) ? info.notes : "有新版本可用";
+        b.setMessage(msg);
+        b.setPositiveButton(R.string.update_now, new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface d, int w) { startUpdate(info); }
+        });
+        b.setNegativeButton(R.string.update_later, null);
+        b.show();
+    }
+
+    private void startUpdate(final Updater.UpdateInfo info) {
+        // 安卓 8+ 需要「安装未知来源应用」权限
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                && !getPackageManager().canRequestPackageInstalls()) {
+            Intent i = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES);
+            i.setData(Uri.parse("package:" + getPackageName()));
+            pendingUpdate = info;
+            startActivityForResult(i, REQ_INSTALL_PERM);
+            return;
+        }
+        downloadAndInstall(info);
+    }
+
+    private void downloadAndInstall(final Updater.UpdateInfo info) {
+        final ProgressDialog pd = new ProgressDialog(this);
+        pd.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
+        pd.setMax(100);
+        pd.setMessage(getString(R.string.updating));
+        pd.setCancelable(false);
+        pd.show();
+        Updater.download(this, info, new Updater.Progress() {
+            @Override
+            public void onProgress(int percent) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() { pd.setProgress(percent); }
+                });
+            }
+            @Override
+            public void onDone(final File apk) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        pd.dismiss();
+                        Updater.install(MainActivity.this, apk);
+                    }
+                });
+            }
+            @Override
+            public void onError(final String err) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        pd.dismiss();
+                        Toast.makeText(MainActivity.this,
+                                getString(R.string.download_fail, err), Toast.LENGTH_LONG).show();
+                    }
+                });
+            }
+        });
     }
 
     private void showAccountsDialog() {

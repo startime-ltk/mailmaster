@@ -15,4 +15,7 @@
     <item
         android:id="@+id/menu_ai"
         android:title="@string/menu_ai" />
+    <item
+        android:id="@+id/menu_check_update"
+        android:title="@string/menu_check_update" />
 </menu>
