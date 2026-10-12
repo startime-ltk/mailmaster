@@ -64,8 +64,8 @@ public class MainActivity extends Activity {
 
     /** 头像色板：按发件人地址哈希取色，同一个人永远同色 */
     private static final int[] AVATAR_COLORS = {
-            0xFFE53935, 0xFF1E88E5, 0xFF43A047, 0xFFFB8C00,
-            0xFF8E24AA, 0xFF00897B, 0xFFD81B60, 0xFF6D4C41
+            0xFF3B82F6, 0xFF10B981, 0xFFF59E0B, 0xFFEF4444,
+            0xFF8B5CF6, 0xFF06B6D4, 0xFFEC4899, 0xFFF97316
     };
 
     @Override
@@ -269,7 +269,11 @@ public class MainActivity extends Activity {
                 GradientDrawable circle = new GradientDrawable();
                 circle.setShape(GradientDrawable.OVAL);
                 circle.setColor(m.unread ? avatarColor(m.from) : getResources().getColor(R.color.avatar_read));
+                circle.setStroke((int) (2 * dp), 0xFFFFFFFF);
                 av.setBackground(circle);
+
+                View dot = cv.findViewById(R.id.unread_dot);
+                dot.setVisibility(m.unread ? View.VISIBLE : View.GONE);
 
                 TextView subj = cv.findViewById(R.id.tv_subject);
                 subj.setText(m.subject);
@@ -293,7 +297,7 @@ public class MainActivity extends Activity {
                     cat.setVisibility(View.VISIBLE);
                     cat.setText(c);
                     GradientDrawable chip = new GradientDrawable();
-                    chip.setCornerRadius(10 * dp);
+                    chip.setCornerRadius(12 * dp);
                     chip.setColor(getResources().getColor(colorOf(c)));
                     cat.setBackground(chip);
                 }
@@ -372,6 +376,25 @@ public class MainActivity extends Activity {
 
     private int dp(int n) {
         return (int) (n * getResources().getDisplayMetrics().density);
+    }
+
+    /** 对话框输入框统一卡片化样式 */
+    private void styleInput(EditText e) {
+        e.setBackgroundResource(R.drawable.bg_search);
+        e.setPadding(dp(14), dp(12), dp(14), dp(12));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = dp(10);
+        e.setLayoutParams(lp);
+    }
+
+    private void styleInput(Spinner s) {
+        s.setBackgroundResource(R.drawable.bg_search);
+        s.setPadding(dp(14), dp(4), dp(14), dp(4));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = dp(10);
+        s.setLayoutParams(lp);
     }
 
     private TextView makeChip(String text) {
@@ -609,6 +632,9 @@ public class MainActivity extends Activity {
             tv.setLayoutParams(lp);
             Button del = new Button(this);
             del.setText(R.string.btn_delete);
+            del.setBackgroundResource(R.drawable.btn_outline);
+            del.setTextColor(0xFFEF4444);
+            del.setPadding(dp(16), dp(6), dp(16), dp(6));
             del.setOnClickListener(new View.OnClickListener() {
                 @Override public void onClick(View v) {
                     store.removeAccount(a.id);
@@ -724,6 +750,7 @@ public class MainActivity extends Activity {
         lay.setPadding(40, 30, 40, 10);
 
         final Spinner sp = new Spinner(this);
+        styleInput(sp);
         final String[] provs = {"QQ", "163", "OUTLOOK", "CUSTOM"};
         ArrayAdapter<String> sa = new ArrayAdapter<>(this,
                 android.R.layout.simple_spinner_item, provs);
@@ -733,19 +760,21 @@ public class MainActivity extends Activity {
         final EditText email = new EditText(this);
         email.setHint(R.string.hint_email);
         email.setInputType(InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
+        styleInput(email);
         final EditText pw = new EditText(this);
         pw.setHint(R.string.hint_auth);
+        styleInput(pw);
 
         // 自定义邮箱高级字段（默认隐藏）
         final LinearLayout customBox = new LinearLayout(this);
         customBox.setOrientation(LinearLayout.VERTICAL);
         customBox.setVisibility(View.GONE);
-        final EditText etName = new EditText(this); etName.setHint(R.string.hint_account_name);
-        final EditText etImapH = new EditText(this); etImapH.setHint(R.string.hint_imap_host);
-        final EditText etImapP = new EditText(this); etImapP.setHint(R.string.hint_imap_port);
+        final EditText etName = new EditText(this); etName.setHint(R.string.hint_account_name); styleInput(etName);
+        final EditText etImapH = new EditText(this); etImapH.setHint(R.string.hint_imap_host); styleInput(etImapH);
+        final EditText etImapP = new EditText(this); etImapP.setHint(R.string.hint_imap_port); styleInput(etImapP);
         etImapP.setInputType(InputType.TYPE_CLASS_NUMBER);
-        final EditText etSmtpH = new EditText(this); etSmtpH.setHint(R.string.hint_smtp_host);
-        final EditText etSmtpP = new EditText(this); etSmtpP.setHint(R.string.hint_smtp_port);
+        final EditText etSmtpH = new EditText(this); etSmtpH.setHint(R.string.hint_smtp_host); styleInput(etSmtpH);
+        final EditText etSmtpP = new EditText(this); etSmtpP.setHint(R.string.hint_smtp_port); styleInput(etSmtpP);
         etSmtpP.setInputType(InputType.TYPE_CLASS_NUMBER);
         final CheckBox chkTls = new CheckBox(this); chkTls.setText(R.string.label_ssl);
         customBox.addView(etName); customBox.addView(etImapH); customBox.addView(etImapP);

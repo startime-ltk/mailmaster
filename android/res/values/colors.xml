@@ -1,26 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Material 深蓝主色 + 琥珀强调色 -->
-    <color name="primary">#1565C0</color>
-    <color name="primary_dark">#0D47A1</color>
-    <color name="primary_light">#E3F0FC</color>
-    <color name="accent">#FF6D00</color>
+    <!-- 现代蓝主色 + 活力橙强调色 -->
+    <color name="primary">#2563EB</color>
+    <color name="primary_dark">#1E3A8A</color>
+    <color name="primary_light">#EFF4FF</color>
+    <color name="accent">#FF7A1A</color>
     <color name="on_primary">#FFFFFF</color>
-    <color name="on_primary_sub">#C5DCF7</color>
+    <color name="on_primary_sub">#DCE7FF</color>
 
-    <color name="bg">#EEF1F5</color>
+    <!-- 渐变工具栏两端色 -->
+    <color name="grad_start">#3B82F6</color>
+    <color name="grad_end">#1D4ED8</color>
+
+    <color name="bg">#F5F7FB</color>
     <color name="card">#FFFFFF</color>
-    <color name="text">#1B1F23</color>
-    <color name="sub">#7A828A</color>
-    <color name="divider">#E3E7EC</color>
-    <color name="chip_bg">#F1F4F8</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="text">#1F2937</color>
+    <color name="sub">#6B7280</color>
+    <color name="divider">#EAEDF2</color>
+    <color name="chip_bg">#EEF2F7</color>
 
     <!-- 智能分类标签配色 -->
-    <color name="cat_important">#E53935</color>
-    <color name="cat_promo">#FB8C00</color>
-    <color name="cat_social">#1E88E5</color>
-    <color name="cat_other">#9E9E9E</color>
+    <color name="cat_important">#EF4444</color>
+    <color name="cat_promo">#F59E0B</color>
+    <color name="cat_social">#3B82F6</color>
+    <color name="cat_other">#9CA3AF</color>
 
     <!-- 已读头像灰 -->
-    <color name="avatar_read">#B0BEC5</color>
+    <color name="avatar_read">#CBD5E1</color>
+    <!-- 删除/警示红 -->
+    <color name="danger">#EF4444</color>
 </resources>

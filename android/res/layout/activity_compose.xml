@@ -7,8 +7,8 @@
     <android.widget.Toolbar
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
-        android:layout_height="?android:attr/actionBarSize"
-        android:background="@color/primary"
+            android:layout_height="?android:attr/actionBarSize"
+            android:background="@drawable/bg_toolbar"
         android:elevation="4dp"
         android:contentInsetStart="0dp"
         android:contentInsetLeft="0dp">
