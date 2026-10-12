@@ -67,6 +67,7 @@
 - **v1.9**：AI 智能分类默认服务商由火山方舟切换到 **DeepSeek**（OpenAI 兼容协议，开箱即用，不用逐个开通模型）。
 - **v1.10**：菜单「⋯ → 检查更新」联网拉 GitHub Release 的 `update.json`，比对 `versionCode` 后下载最新 APK 并**直接调起系统安装器覆盖安装，全程无需电脑**。
 - **v1.11**：版本号唯一数据源收敛为 `AndroidManifest.xml`，CI 与本地构建严格一致；发版只需「升 Manifest 版本号 + 打 `v*` tag」，GitHub Actions 自动出带 `update.json` 的 Release，App 内点一下即更新。
+- **v1.12**：应用内更新提速——拉取更新清单与下载 APK 默认走国内加速镜像（ghfast.top / ghproxy.net，自动 fallback，8 秒连接超时快速切换），告别直连 GitHub 的龟速。
 
 ### v1.5 新增：去掉测试邮箱，只留真实邮箱
 - **真实模式不再回退演示邮件**：收取为空/失败一律显示空列表并提示「检查授权码或网络」，不再偷偷显示示例邮件。

@@ -100,6 +100,12 @@ jobs:
             "versionCode": ${VC},
             "versionName": "${VN}",
             "apkUrl": "${URL}",
+            "apkUrls": [
+              "https://ghfast.top/${URL}",
+              "https://ghproxy.net/${URL}",
+              "https://gh.api.99988866.xyz/${URL}",
+              "${URL}"
+            ],
             "notes": "邮箱大师 v${VN} 自动构建发布",
             "publishedAt": "${GITHUB_SHA}"
           }

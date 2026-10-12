@@ -543,7 +543,10 @@ public class MainActivity extends Activity {
             public void onProgress(int percent) {
                 runOnUiThread(new Runnable() {
                     @Override
-                    public void run() { pd.setProgress(percent); }
+                    public void run() {
+                        pd.setMessage(getString(R.string.updating) + "（加速镜像 " + percent + "%）");
+                        pd.setProgress(percent);
+                    }
                 });
             }
             @Override
