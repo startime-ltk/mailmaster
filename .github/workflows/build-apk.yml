@@ -65,8 +65,9 @@ jobs:
         env:
           # 若仓库配置了 Secrets，则打 release 包；否则打 debug 包
           KEYSTORE_PATH: ${{ github.workspace }}/android/release.keystore
-          # versionCode 用 run_number 自动递增（安卓要求每次发版递增；不改源文件）
-          APP_VERSION_CODE: ${{ github.run_number }}
+          # 版本号唯一数据源始终是 AndroidManifest.xml（versionCode/versionName），
+          # 不再用 run_number 覆盖，确保「本地手动构建」与「CI 构建」版本号完全一致，
+          # 应用内「检查更新」的 versionCode 比对才不会出现倒退。
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEYSTORE_PASS: ${{ secrets.KEYSTORE_PASS }}
           KEY_PASS: ${{ secrets.KEY_PASS }}
@@ -88,9 +89,9 @@ jobs:
       - name: 生成 update.json（仅打 tag 时，作为 App 内「检查更新」的更新清单）
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
-          # 版本号唯一数据源仍是 Manifest；apkUrl 指向本次 Release 上的同名 APK
+          # 版本号唯一数据源始终是 Manifest；apkUrl 指向本次 Release 上的同名 APK
           VN=$(sed -n 's/.*android:versionName="\([^"]*\)".*/\1/p' android/AndroidManifest.xml | head -1)
-          VC="${{ github.run_number }}"
+          VC=$(sed -n 's/.*android:versionCode="\([^"]*\)".*/\1/p' android/AndroidManifest.xml | head -1)
           TAG="${{ github.ref_name }}"
           APK="MailMaster-v${VN}.apk"
           URL="https://github.com/startime-ltk/mailmaster/releases/download/${TAG}/${APK}"
