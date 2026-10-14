@@ -8,8 +8,12 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.View;
+import android.webkit.ValueCallback;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.webkit.WebViewClient;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -147,11 +151,21 @@ public class MessageActivity extends Activity {
      * 有 HTML 就用 WebView 按原排版渲染，纯文本邮件回退 TextView。
      * WebView 一律禁止加载远程资源——邮件里的追踪像素正是靠它统计你何时打开邮件的，
      * 一个「本地优先」的客户端理应默认把它掐掉。
+     *
+     * 兜底策略（治「只有标题没内容」）：HTML 非空不等于渲染成功——
+     * 文档不完整、可见文本全被 style/template 包住时 WebView 会是空白，
+     * 而这封邮件的纯文本正文往往是有内容的。旧逻辑「有 HTML 就只显示 HTML、
+     * 纯文本永远不登场」会让这类邮件只剩标题。现在加载完成后检测可见文本，
+     * 为空则自动回退纯文本；HTML 与纯文本都空时给出明确提示而不是一片空白。
      */
     private void renderBody() {
-        View sv = findViewById(R.id.sv_text);
-        WebView wv = findViewById(R.id.wv_body);
-        if (msg.html != null && msg.html.trim().length() > 0) {
+        final View sv = findViewById(R.id.sv_text);
+        final WebView wv = findViewById(R.id.wv_body);
+        final TextView bodyTv = (TextView) findViewById(R.id.tv_body);
+        final boolean hasHtml = msg.html != null && msg.html.trim().length() > 0;
+        final boolean hasText = msg.body != null && msg.body.trim().length() > 0;
+
+        if (hasHtml) {
             sv.setVisibility(View.GONE);
             wv.setVisibility(View.VISIBLE);
             WebSettings ws = wv.getSettings();
@@ -159,13 +173,60 @@ public class MessageActivity extends Activity {
             ws.setBlockNetworkLoads(true);
             ws.setLoadWithOverviewMode(true);
             ws.setUseWideViewPort(true);
+            wv.setWebViewClient(new WebViewClient() {
+                @Override
+                public void onPageFinished(WebView view, String url) {
+                    if (isFinishing()) return;
+                    // 检测 HTML 是否渲染出了可见文本；为空说明渲染失败或整封就是一张图
+                    view.evaluateJavascript(
+                            "(function(){try{return (document.body?document.body.innerText:'').trim();}"
+                                    + "catch(e){return '';}})()",
+                            new ValueCallback<String>() {
+                                @Override
+                                public void onReceiveValue(String value) {
+                                    // value 为 JSON 串：可见文本为空时返回 ""（两个引号）；
+                                    // 返回 null 表示脚本没执行，保守起见不回退
+                                    if (value == null) return;
+                                    String t = value.trim();
+                                    if (t.equals("\"\"") || t.isEmpty()) {
+                                        // 渲染出空白：有纯文本就回退；纯图片邮件则保留 WebView
+                                        if (hasText) fallbackToText();
+                                    }
+                                }
+                            });
+                }
+
+                @Override
+                public void onReceivedError(WebView view, WebResourceRequest request,
+                        WebResourceError error) {
+                    if (isFinishing()) return;
+                    if (request != null && request.isForMainFrame() && hasText) {
+                        fallbackToText();
+                    }
+                }
+            });
             wv.loadDataWithBaseURL(null, MailParser.wrapForDisplay(msg.html),
                     "text/html; charset=UTF-8", "UTF-8", null);
-        } else {
+        } else if (hasText) {
             wv.setVisibility(View.GONE);
             sv.setVisibility(View.VISIBLE);
-            ((TextView) findViewById(R.id.tv_body)).setText(nvl(msg.body));
+            bodyTv.setText(msg.body);
+        } else {
+            // HTML 与纯文本都为空：加密/签名邮件或格式特殊，给出明确提示而非一片空白
+            wv.setVisibility(View.GONE);
+            sv.setVisibility(View.VISIBLE);
+            bodyTv.setText(R.string.msg_body_unavailable);
         }
+    }
+
+    /** WebView 渲染失败/空白时回退到纯文本正文 */
+    private void fallbackToText() {
+        WebView wv = findViewById(R.id.wv_body);
+        View sv = findViewById(R.id.sv_text);
+        TextView bodyTv = (TextView) findViewById(R.id.tv_body);
+        wv.setVisibility(View.GONE);
+        sv.setVisibility(View.VISIBLE);
+        bodyTv.setText(msg.body == null ? "" : msg.body);
     }
 
     private void bindReplyForward() {

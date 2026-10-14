@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>邮箱大师 v1.14 · UI 美化说明</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+         background:#F5F7FB; color:#1F2937; line-height:1.6; }
+  .banner { background:linear-gradient(135deg,#3B82F6,#1D4ED8); color:#fff;
+            padding:40px 28px; }
+  .banner h1 { font-size:26px; font-weight:800; letter-spacing:.5px; }
+  .banner p { margin-top:8px; opacity:.92; font-size:14px; }
+  .wrap { max-width:860px; margin:0 auto; padding:24px 18px 60px; }
+  .card { background:#fff; border:1px solid #EAEDF2; border-radius:16px;
+          padding:22px; margin-bottom:18px; box-shadow:0 1px 3px rgba(0,0,0,.04); }
+  .card h2 { font-size:18px; margin-bottom:14px; color:#1D4ED8; }
+  .swatch-row { display:flex; flex-wrap:wrap; gap:14px; }
+  .sw { width:120px; }
+  .sw .box { height:64px; border-radius:12px; border:1px solid #EAEDF2; }
+  .sw .name { font-size:12px; margin-top:6px; color:#6B7280; }
+  .sw .hex { font-size:12px; font-weight:700; }
+  ul.changes { list-style:none; }
+  ul.changes li { padding:10px 0 10px 30px; border-bottom:1px solid #F0F2F6;
+                  position:relative; font-size:14px; }
+  ul.changes li:last-child { border-bottom:none; }
+  ul.changes li::before { content:"✓"; position:absolute; left:0; top:10px;
+                  color:#2563EB; font-weight:800; }
+  .tag { display:inline-block; background:#EFF4FF; color:#1D4ED8; font-size:12px;
+         padding:2px 10px; border-radius:99px; margin-right:6px; }
+  .compare { display:flex; gap:16px; flex-wrap:wrap; }
+  .compare .col { flex:1; min-width:240px; }
+  .compare .col .ph { height:140px; border-radius:14px; padding:14px; color:#fff; }
+  .old { background:#1565C0; }
+  .new { background:linear-gradient(135deg,#3B82F6,#1D4ED8); }
+  .compare .col h3 { font-size:14px; margin:10px 0 4px; }
+  .compare .col .desc { font-size:12px; color:#6B7280; }
+  .note { background:#FFF7ED; border:1px solid #FED7AA; border-radius:14px;
+          padding:16px 18px; font-size:13px; color:#9A3412; }
+  .note b { color:#7C2D12; }
+  .install { font-size:14px; }
+  .install code { background:#EEF2F7; padding:2px 8px; border-radius:6px;
+                  font-size:13px; color:#1D4ED8; }
+  .foot { text-align:center; color:#9CA3AF; font-size:12px; margin-top:30px; }
+</style>
+</head>
+<body>
+  <div class="banner">
+    <h1>邮箱大师 MailMaster · v1.14</h1>
+    <p>UI 美化专项：现代蓝渐变主题 · 未读蓝点 · 卡片层次 · 对话框卡片化</p>
+  </div>
+
+  <div class="wrap">
+    <div class="card">
+      <h2>🎨 配色升级</h2>
+      <div class="swatch-row">
+        <div class="sw"><div class="box" style="background:#2563EB"></div><div class="hex">#2563EB</div><div class="name">主色 Primary</div></div>
+        <div class="sw"><div class="box" style="background:linear-gradient(135deg,#3B82F6,#1D4ED8)"></div><div class="hex">#3B82F6→#1D4ED8</div><div class="name">渐变工具栏</div></div>
+        <div class="sw"><div class="box" style="background:#FF7A1A"></div><div class="hex">#FF7A1A</div><div class="name">强调 Accent</div></div>
+        <div class="sw"><div class="box" style="background:#EF4444"></div><div class="hex">#EF4444</div><div class="name">重要/警示</div></div>
+        <div class="sw"><div class="box" style="background:#F5F7FB"></div><div class="hex">#F5F7FB</div><div class="name">背景 BG</div></div>
+        <div class="sw"><div class="box" style="background:#EFF4FF"></div><div class="hex">#EFF4FF</div><div class="name">主色浅</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>🔁 视觉前后对比</h2>
+      <div class="compare">
+        <div class="col">
+          <div class="ph old">旧 · 纯色深蓝工具栏</div>
+          <h3>改造前</h3>
+          <div class="desc">纯色 #1565C0 工具栏、卡片平、无阴影、列表项无未读指示、对话框输入框裸控件。</div>
+        </div>
+        <div class="col">
+          <div class="ph new">新 · 渐变蓝工具栏</div>
+          <h3>改造后</h3>
+          <div class="desc">135° 渐变工具栏、卡片圆角 16dp + 描边微阴影、未读蓝点 + 头像白边、对话框全卡片化。</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>✨ 具体改动</h2>
+      <ul class="changes">
+        <li><span class="tag">主题</span>工具栏由纯色改为 135° 蓝紫渐变（<code>bg_toolbar.xml</code>），三个页面统一。</li>
+        <li><span class="tag">列表</span>新增<b>未读蓝点</b>（头像左侧 8dp 圆点，未读才显示），一眼区分已读/未读。</li>
+        <li><span class="tag">头像</span>发件人头像加 2dp 白色描边，从扁平色块变为精致圆形徽标。</li>
+        <li><span class="tag">卡片</span>所有卡片圆角提至 16dp，加 1dp 浅描边 + 轻微 elevation，层次更清晰。</li>
+        <li><span class="tag">FAB</span>悬浮写信按钮改为橙黄渐变圆形，质感更立体。</li>
+        <li><span class="tag">筛选</span>分类 chip 圆角统一为 16dp，选中态更圆润。</li>
+        <li><span class="tag">详情</span>邮件详情头部信息区升级为独立卡片（留白 + 阴影），与正文/附件卡风格统一。</li>
+        <li><span class="tag">对话框</span>AI 设置「测试」按钮套用主色样式；账户添加/管理的输入框、Spinner、删除按钮全部卡片化（删除按钮红色警示）。</li>
+        <li><span class="tag">配色</span>头像色板与分类标签色改用更协调的现代色系（蓝/绿/橙/红/紫/青/粉/橙）。</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>📦 如何安装 / 更新</h2>
+      <p class="install">
+        方式一（应用内）：已装旧版可直接在右上角菜单「检查更新」→ 一键下载安装 v1.14。<br>
+        方式二（手动）：用本地构建的 <code>MailMaster-v1.14-debug.apk</code> 覆盖安装（与本地旧 debug 版同签名）。<br>
+        远端 CI 已生成 Release：<code>v1.14</code>，含 4 个国内镜像加速地址，<code>update.json</code> 校验通过。<br>
+      </p>
+    </div>
+
+    <div class="note">
+      <b>⚠️ 关于签名一致性：</b>CI 发布的 Release（<code>MailMaster-v1.14.apk</code>）使用统一发布签名，而本地手动构建的是 debug 签名。
+      若你手机上装的是<b>本地 debug 版</b>，应用内「点更新」下载的是 CI release 版（签名不同），覆盖安装会失败。
+      建议统一安装 CI Release 版（或从 CI 下载的 v1.14 直接安装），「点更新」链路即可正常工作。
+    </div>
+
+    <div class="foot">MailMaster · 轻量化学习 / 参赛作品 · v1.14 UI 美化</div>
+  </div>
+</body>
+</html>

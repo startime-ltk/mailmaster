@@ -38,6 +38,7 @@
     <string name="loading">正在收取邮件…</string>
     <string name="unread_hint">未读</string>
     <string name="bar_title_message">邮件详情</string>
+    <string name="msg_body_unavailable">此邮件正文暂时无法显示（可能是加密邮件、带数字签名的邮件，或使用了特殊格式）。可尝试下拉刷新重新收取。</string>
     <string name="bar_title_compose">写邮件</string>
     <string name="content_back">返回</string>
     <string name="content_compose">写邮件</string>

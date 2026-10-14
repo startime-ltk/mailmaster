@@ -73,7 +73,13 @@ public class MailCache extends SQLiteOpenHelper {
         // v1 暂无需迁移；保留钩子
     }
 
-    /** 批量写入（存在则覆盖，按 account_id+msg_id 去重）。事务提交，避免逐条 IO。 */
+    /**
+     * 批量写入（存在则覆盖，按 account_id+msg_id 去重）。事务提交，避免逐条 IO。
+     *
+     * 防空覆盖（治「只有标题没内容」的固化）：若本次抓取 body/html 均为空
+     * （抓取失败或解析异常导致的空结果），而库里已有非空内容，
+     * 则保留旧记录，不把一次失败固化成永久空白。
+     */
     public void upsertAll(List<MailMessage> msgs) {
         if (msgs == null || msgs.isEmpty()) return;
         SQLiteDatabase db = getWritableDatabase();
@@ -81,11 +87,43 @@ public class MailCache extends SQLiteOpenHelper {
         try {
             for (MailMessage m : msgs) {
                 if (m == null || m.id == null) continue;
+                if (isEmptyContent(m) && hasContent(db, m.accountId, m.id)) {
+                    // 本次没抓到内容但历史有：保留历史，防止永久空白
+                    continue;
+                }
                 db.insertWithOnConflict(TABLE, null, toValues(m), SQLiteDatabase.CONFLICT_REPLACE);
             }
             db.setTransactionSuccessful();
         } finally {
             db.endTransaction();
+        }
+    }
+
+    /** body 与 html 是否都为空 */
+    private boolean isEmptyContent(MailMessage m) {
+        boolean bodyEmpty = m.body == null || m.body.trim().length() == 0;
+        boolean htmlEmpty = m.html == null || m.html.trim().length() == 0;
+        return bodyEmpty && htmlEmpty;
+    }
+
+    /** 库里是否已存有非空正文 */
+    private boolean hasContent(SQLiteDatabase db, String accountId, String msgId) {
+        if (accountId == null || msgId == null) return false;
+        Cursor c = null;
+        try {
+            c = db.query(TABLE, new String[]{"body", "html"}, "account_id=? AND msg_id=?",
+                    new String[]{accountId, msgId}, null, null, null);
+            if (c.moveToFirst()) {
+                String body = c.getString(0);
+                String html = c.getString(1);
+                return (body != null && body.trim().length() > 0)
+                        || (html != null && html.trim().length() > 0);
+            }
+            return false;
+        } catch (Exception e) {
+            return false;
+        } finally {
+            if (c != null) c.close();
         }
     }
 

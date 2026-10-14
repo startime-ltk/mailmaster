@@ -1,5 +1,6 @@
 package com.mailmaster.android;
 
+import android.util.Log;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -27,6 +28,8 @@ import javax.mail.internet.MimeUtility;
  */
 public final class MailParser {
 
+    private static final String TAG = "MailParser";
+
     /** 正文最大长度，避免超长邮件把内存和列表拖垮 */
     private static final int MAX_BODY = 20_000;
 
@@ -49,6 +52,11 @@ public final class MailParser {
 
     /**
      * 递归提取正文。优先 text/plain，其次 text/html（转纯文本），跳过附件。
+     *
+     * 容错策略（「有的邮件只有标题没内容」的根治点）：
+     * 旧版把整个方法包在一个 try-catch 里，任何一个 Part 抛异常都会让整封邮件正文归零；
+     * 而标题走的是 getSubject() 头字段、不经过这里，于是出现「标题在、正文空」。
+     * 现改为逐个 Part 独立容错——单个部件解析失败只跳过它，不连累整封。
      */
     public static String extractBody(Part p) {
         try {
@@ -60,21 +68,37 @@ public final class MailParser {
                     String plain = null;
                     String html = null;
                     for (int i = 0; i < mp.getCount(); i++) {
-                        Part child = mp.getBodyPart(i);
+                        Part child = null;
+                        try {
+                            child = mp.getBodyPart(i);
+                        } catch (Exception e) {
+                            Log.w(TAG, "extractBody: getBodyPart(" + i + ") failed", e);
+                            continue;
+                        }
                         if (child == null) continue;
-                        String disp = child.getDisposition();
+                        String disp = null;
+                        try {
+                            disp = child.getDisposition();
+                        } catch (Exception ignored) {
+                        }
                         // 跳过附件（除非它同时是正文）
                         if (disp != null && disp.equalsIgnoreCase(Part.ATTACHMENT)
                                 && !child.isMimeType("text/*")) {
                             continue;
                         }
                         if (child.isMimeType("multipart/*")) {
+                            // 递归方法自带整体容错，单个失败返回空串，不影响其它分支
                             String inner = extractBody(child);
-                            if (plain == null && !inner.isEmpty()) plain = inner;
+                            if (plain == null && inner != null && !inner.isEmpty()) plain = inner;
                         } else if (child.isMimeType("text/plain") && plain == null) {
-                            plain = readTextPart(child);
+                            plain = readTextPartSafe(child);
                         } else if (child.isMimeType("text/html") && html == null) {
-                            html = readTextPart(child);
+                            html = readTextPartSafe(child);
+                        } else if (plain == null && child.isMimeType("text/*")
+                                && !child.isMimeType("text/html")) {
+                            // text/calendar（会议邀请）、text/xml、text/enriched 等非标准文本：
+                            // 作为正文兜底候选，避免整封邮件只剩标题
+                            plain = readTextPartSafe(child);
                         }
                     }
                     if (plain != null && !plain.trim().isEmpty()) return clip(plain);
@@ -82,10 +106,14 @@ public final class MailParser {
                 }
                 return "";
             }
-            if (p.isMimeType("text/plain")) return clip(readTextPart(p));
-            if (p.isMimeType("text/html")) return clip(stripTags(readTextPart(p)));
+            if (p.isMimeType("text/plain")) return clip(readTextPartSafe(p));
+            if (p.isMimeType("text/html")) return clip(stripTags(readTextPartSafe(p)));
+            // 顶层 text/calendar、text/xml 等非标准文本兜底
+            if (p.isMimeType("text/*")) return clip(readTextPartSafe(p));
             return "";
         } catch (Exception e) {
+            // 只有顶层彻底失败才返回空；单个 Part 的失败已在循环内单独消化
+            Log.e(TAG, "extractBody failed", e);
             return "";
         }
     }
@@ -118,6 +146,28 @@ public final class MailParser {
                 } catch (Exception ignored) {
                 }
             }
+        }
+    }
+
+    /**
+     * 带容错的文本部件读取：单个部件失败只记日志并返回空串，
+     * 不再让异常穿透到调用方、把整封邮件正文清零。
+     */
+    private static String readTextPartSafe(Part p) {
+        try {
+            return readTextPart(p);
+        } catch (Exception e) {
+            Log.w(TAG, "readTextPart failed, type=" + safeContentType(p), e);
+            return "";
+        }
+    }
+
+    /** 日志辅助：安全地取 Content-Type，避免日志代码本身再抛异常 */
+    private static String safeContentType(Part p) {
+        try {
+            return p.getContentType();
+        } catch (Exception e) {
+            return "<unknown>";
         }
     }
 
@@ -191,22 +241,31 @@ public final class MailParser {
                 if (c instanceof MimeMultipart) {
                     MimeMultipart mp = (MimeMultipart) c;
                     for (int i = 0; i < mp.getCount(); i++) {
-                        Part child = mp.getBodyPart(i);
+                        Part child = null;
+                        try {
+                            child = mp.getBodyPart(i);
+                        } catch (Exception e) {
+                            Log.w(TAG, "extractHtml: getBodyPart(" + i + ") failed", e);
+                            continue;
+                        }
                         if (child == null) continue;
                         if (child.isMimeType("multipart/*")) {
+                            // multipart/signed 的签名体、multipart/related 的图片都走这里递归或跳过，
+                            // 正文（text/html）会被优先找到
                             String inner = extractHtml(child);
-                            if (!inner.isEmpty()) return inner;
+                            if (inner != null && !inner.isEmpty()) return inner;
                         } else if (child.isMimeType("text/html")) {
-                            String h = readTextPart(child);
+                            String h = readTextPartSafe(child);
                             if (h != null && !h.trim().isEmpty()) return h;
                         }
                     }
                 }
                 return "";
             }
-            if (p.isMimeType("text/html")) return readTextPart(p);
+            if (p.isMimeType("text/html")) return readTextPartSafe(p);
             return "";
         } catch (Exception e) {
+            Log.e(TAG, "extractHtml failed", e);
             return "";
         }
     }
