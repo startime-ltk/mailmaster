@@ -6,6 +6,7 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -25,7 +26,7 @@ import java.util.List;
 public class MailCache extends SQLiteOpenHelper {
 
     private static final String DB_NAME = "mailmaster_cache.db";
-    private static final int DB_VERSION = 1;
+    private static final int DB_VERSION = 2;
     private static final String TABLE = "messages";
 
     // 单列引用，避免 Activity 泄漏
@@ -64,13 +65,19 @@ public class MailCache extends SQLiteOpenHelper {
             " category TEXT," +
             " attachments TEXT," +  // Attachment 列表的 JSON 序列化
             " msg_num INTEGER," +
+            " deleted INTEGER NOT NULL DEFAULT 0," +   // 回收站：0 正常 / 1 已删除
+            " deleted_at INTEGER NOT NULL DEFAULT 0," + // 删除时间戳（回收站排序用）
             " UNIQUE(account_id, msg_id))"
         );
     }
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldV, int newV) {
-        // v1 暂无需迁移；保留钩子
+        if (oldV < 2) {
+            // v2 回收站：软删除标记与删除时间。ALTER 追加列，既有邮件数据与缓存全部保留
+            db.execSQL("ALTER TABLE " + TABLE + " ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0");
+            db.execSQL("ALTER TABLE " + TABLE + " ADD COLUMN deleted_at INTEGER NOT NULL DEFAULT 0");
+        }
     }
 
     /**
@@ -87,6 +94,8 @@ public class MailCache extends SQLiteOpenHelper {
         try {
             for (MailMessage m : msgs) {
                 if (m == null || m.id == null) continue;
+                // 回收站里的邮件不参与服务器同步：否则下次拉取会把用户删掉的邮件"复活"
+                if (isDeletedInDb(db, m.accountId, m.id)) continue;
                 if (isEmptyContent(m) && hasContent(db, m.accountId, m.id)) {
                     // 本次没抓到内容但历史有：保留历史，防止永久空白
                     continue;
@@ -127,13 +136,13 @@ public class MailCache extends SQLiteOpenHelper {
         }
     }
 
-    /** 取出全部本地邮件，按时间倒序（最新在前）。 */
+    /** 取出全部正常邮件（不含回收站），按时间倒序（最新在前）。 */
     public List<MailMessage> getAll() {
         List<MailMessage> out = new ArrayList<>();
         SQLiteDatabase db = getReadableDatabase();
         Cursor c = null;
         try {
-            c = db.query(TABLE, null, null, null, null, null, "date DESC");
+            c = db.query(TABLE, null, "deleted=0", null, null, null, "date DESC");
             while (c.moveToNext()) out.add(fromCursor(c));
         } finally {
             if (c != null) c.close();
@@ -158,6 +167,116 @@ public class MailCache extends SQLiteOpenHelper {
         v.put("unread", 0);
         db.update(TABLE, v, "account_id=? AND msg_num=?",
                 new String[]{accountId, String.valueOf(msgNum)});
+    }
+
+    // ---------- 回收站（软删除） ----------
+
+    /** 回收站列表：已软删除的邮件，按删除时间倒序（最新删的在前）。 */
+    public List<MailMessage> getTrash() {
+        List<MailMessage> out = new ArrayList<>();
+        SQLiteDatabase db = getReadableDatabase();
+        Cursor c = null;
+        try {
+            c = db.query(TABLE, null, "deleted=1", null, null, null, "deleted_at DESC");
+            while (c.moveToNext()) out.add(fromCursor(c));
+        } finally {
+            if (c != null) c.close();
+        }
+        return out;
+    }
+
+    /** 回收站邮件数（菜单上显示角标）。 */
+    public int countTrash() {
+        SQLiteDatabase db = getReadableDatabase();
+        Cursor c = null;
+        try {
+            c = db.rawQuery("SELECT COUNT(*) FROM " + TABLE + " WHERE deleted=1", null);
+            return (c.moveToFirst()) ? c.getInt(0) : 0;
+        } catch (Exception e) {
+            return 0;
+        } finally {
+            if (c != null) c.close();
+        }
+    }
+
+    /**
+     * 软删除：移入回收站。只打标记，本地正文与附件原样保留，服务器不动——
+     * 误删可完整恢复，这是回收站的意义所在。
+     */
+    public void softDelete(String accountId, String msgId) {
+        if (accountId == null || msgId == null) return;
+        SQLiteDatabase db = getWritableDatabase();
+        android.content.ContentValues v = new android.content.ContentValues();
+        v.put("deleted", 1);
+        v.put("deleted_at", System.currentTimeMillis());
+        db.update(TABLE, v, "account_id=? AND msg_id=?", new String[]{accountId, msgId});
+    }
+
+    /** 从回收站恢复到收件箱。 */
+    public void restore(String accountId, String msgId) {
+        if (accountId == null || msgId == null) return;
+        SQLiteDatabase db = getWritableDatabase();
+        android.content.ContentValues v = new android.content.ContentValues();
+        v.put("deleted", 0);
+        v.put("deleted_at", 0);
+        db.update(TABLE, v, "account_id=? AND msg_id=?", new String[]{accountId, msgId});
+    }
+
+    /** 彻底删除一封：先删其落盘附件文件，再删数据库行。不可恢复。 */
+    public void purge(String accountId, String msgId) {
+        if (accountId == null || msgId == null) return;
+        SQLiteDatabase db = getWritableDatabase();
+        Cursor c = null;
+        try {
+            c = db.query(TABLE, new String[]{"attachments"}, "account_id=? AND msg_id=?",
+                    new String[]{accountId, msgId}, null, null, null);
+            if (c.moveToFirst()) deleteAttachmentFiles(c.getString(0));
+        } catch (Exception ignored) {
+        } finally {
+            if (c != null) c.close();
+        }
+        db.delete(TABLE, "account_id=? AND msg_id=?", new String[]{accountId, msgId});
+    }
+
+    /** 清空回收站：删除全部已删邮件的附件文件与数据行。不可恢复。 */
+    public void purgeAll() {
+        SQLiteDatabase db = getWritableDatabase();
+        Cursor c = null;
+        try {
+            c = db.query(TABLE, new String[]{"attachments"}, "deleted=1", null, null, null, null);
+            while (c.moveToNext()) deleteAttachmentFiles(c.getString(0));
+        } catch (Exception ignored) {
+        } finally {
+            if (c != null) c.close();
+        }
+        db.delete(TABLE, "deleted=1", null);
+    }
+
+    /** 按 attachments JSON 里记录的路径删除落盘附件文件 */
+    private void deleteAttachmentFiles(String json) {
+        if (json == null || json.isEmpty()) return;
+        for (Attachment a : jsonToAttachments(json)) {
+            if (a == null || a.path == null || a.path.isEmpty()) continue;
+            try {
+                new File(a.path).delete();
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    /** 库中该邮件是否已在回收站（upsertAll 用它防止服务器同步把删除的邮件复活） */
+    private boolean isDeletedInDb(SQLiteDatabase db, String accountId, String msgId) {
+        if (accountId == null || msgId == null) return false;
+        Cursor c = null;
+        try {
+            c = db.query(TABLE, new String[]{"deleted"}, "account_id=? AND msg_id=?",
+                    new String[]{accountId, msgId}, null, null, null);
+            return c.moveToFirst() && c.getInt(0) == 1;
+        } catch (Exception e) {
+            return false;
+        } finally {
+            if (c != null) c.close();
+        }
     }
 
     /** 清空所有本地缓存（谨慎调用）。 */

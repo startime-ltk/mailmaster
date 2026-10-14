@@ -13,6 +13,9 @@
         android:id="@+id/menu_accounts"
         android:title="@string/menu_manage_accounts" />
     <item
+        android:id="@+id/menu_trash"
+        android:title="@string/menu_trash" />
+    <item
         android:id="@+id/menu_ai"
         android:title="@string/menu_ai" />
     <item

@@ -1,7 +1,9 @@
 package com.mailmaster.android;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
@@ -85,7 +87,38 @@ public class MessageActivity extends Activity {
         renderAttachments();
         renderBody();
         bindReplyForward();
+        bindDelete();
         markRead();
+    }
+
+    /** 删除按钮：软删除移入回收站（服务器原件不动，可在回收站恢复） */
+    private void bindDelete() {
+        findViewById(R.id.btn_delete).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                new AlertDialog.Builder(MessageActivity.this)
+                        .setTitle(R.string.trash_move_title)
+                        .setMessage(getString(R.string.trash_move_msg, MainActivity.senderLabel(msg.from)))
+                        .setPositiveButton(R.string.btn_delete, new DialogInterface.OnClickListener() {
+                            @Override public void onClick(DialogInterface d, int w) {
+                                try {
+                                    MailCache.getInstance(MessageActivity.this)
+                                            .softDelete(msg.accountId, msg.id);
+                                } catch (Exception ignored) {
+                                }
+                                Toast.makeText(MessageActivity.this, R.string.toast_moved_trash,
+                                        Toast.LENGTH_SHORT).show();
+                                // 通知列表页：这封被删了，重新读缓存刷新
+                                Intent data = new Intent();
+                                data.putExtra("deleted", true);
+                                setResult(RESULT_OK, data);
+                                finish();
+                            }
+                        })
+                        .setNegativeButton(android.R.string.cancel, null)
+                        .show();
+            }
+        });
     }
 
     /** 附件列表：点一下交给系统里能处理该类型文件的 App 打开 */

@@ -39,6 +39,28 @@
     <string name="unread_hint">未读</string>
     <string name="bar_title_message">邮件详情</string>
     <string name="msg_body_unavailable">此邮件正文暂时无法显示（可能是加密邮件、带数字签名的邮件，或使用了特殊格式）。可尝试下拉刷新重新收取。</string>
+
+    <!-- 回收站 -->
+    <string name="menu_trash">回收站</string>
+    <string name="menu_trash_count">回收站（%1$d）</string>
+    <string name="trash_title">回收站</string>
+    <string name="trash_empty">回收站是空的</string>
+    <string name="trash_hint">删除的邮件会先放到这里，可随时恢复；彻底删除后才不可恢复</string>
+    <string name="trash_clear">清空</string>
+    <string name="trash_move_title">移入回收站</string>
+    <string name="trash_move_msg">确定将「%1$s」的邮件移入回收站吗？\n删除后可在回收站恢复，服务器原件不受影响。</string>
+    <string name="toast_moved_trash">已移入回收站</string>
+    <string name="btn_restore">恢复</string>
+    <string name="trash_purge">彻底删除</string>
+    <string name="toast_restored">已恢复到收件箱</string>
+    <string name="toast_purged">已彻底删除</string>
+    <string name="trash_purge_title">彻底删除这封邮件？</string>
+    <string name="trash_purge_msg">彻底删除后无法恢复（含本地保存的附件）。</string>
+    <string name="trash_clear_title">清空回收站？</string>
+    <string name="trash_clear_msg">将彻底删除回收站全部 %1$d 封邮件（含本地附件），无法恢复。</string>
+    <string name="toast_trash_cleared">回收站已清空</string>
+    <string name="trash_deleted_at">删除于 %1$s</string>
+    <string name="trash_item_actions">恢复：把邮件放回收件箱；彻底删除：连同本地附件一并清除，不可恢复。</string>
     <string name="bar_title_compose">写邮件</string>
     <string name="content_back">返回</string>
     <string name="content_compose">写邮件</string>

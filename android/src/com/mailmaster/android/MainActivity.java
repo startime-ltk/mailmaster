@@ -101,6 +101,46 @@ public class MainActivity extends Activity {
                 startActivityForResult(it, REQ_OPEN);
             }
         });
+
+        // 长按邮件项：移入回收站（软删除，可恢复）
+        list.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener() {
+            @Override
+            public boolean onItemLongClick(AdapterView<?> parent, View view, int pos, long id) {
+                confirmMoveToTrash(adapter.getItem(pos));
+                return true;
+            }
+        });
+    }
+
+    /** 长按删除确认：移入回收站（本地软删除，服务器原件不动，可在回收站恢复） */
+    private void confirmMoveToTrash(final MailMessage m) {
+        if (m == null) return;
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.trash_move_title)
+                .setMessage(getString(R.string.trash_move_msg, senderLabel(m.from)))
+                .setPositiveButton(R.string.btn_delete, new DialogInterface.OnClickListener() {
+                    @Override public void onClick(DialogInterface d, int w) {
+                        MailCache.getInstance(MainActivity.this).softDelete(m.accountId, m.id);
+                        Toast.makeText(MainActivity.this, R.string.toast_moved_trash, Toast.LENGTH_SHORT).show();
+                        // 本地即时移除该封，无需重新联网拉取
+                        all.remove(m);
+                        applyFilter();
+                    }
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    /** 发件人展示名：优先显示名，退化到邮箱地址 */
+    public static String senderLabel(String from) {
+        if (from == null || from.trim().isEmpty()) return "(未知发件人)";
+        String s = from.trim();
+        int lt = s.indexOf('<');
+        if (lt > 0) {
+            String name = s.substring(0, lt).trim();
+            if (!name.isEmpty()) return name;
+        }
+        return s;
     }
 
     private void bindToolbar() {
@@ -116,6 +156,12 @@ public class MainActivity extends Activity {
             @Override public void onClick(View v) {
                 PopupMenu pm = new PopupMenu(MainActivity.this, v);
                 pm.getMenuInflater().inflate(R.menu.main_menu, pm.getMenu());
+                // 回收站菜单项带数量角标（0 封时显示纯标题）
+                MenuItem trashItem = pm.getMenu().findItem(R.id.menu_trash);
+                int trashCount = MailCache.getInstance(MainActivity.this).countTrash();
+                trashItem.setTitle(trashCount > 0
+                        ? getString(R.string.menu_trash_count, trashCount)
+                        : getString(R.string.menu_trash));
                 pm.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
                     @Override public boolean onMenuItemClick(MenuItem item) {
                         return onOptionsItemSelected(item);
@@ -138,7 +184,15 @@ public class MainActivity extends Activity {
     protected void onActivityResult(int req, int res, Intent data) {
         super.onActivityResult(req, res, data);
         if (req == REQ_OPEN) {
-            applyFilter();
+            if (data != null && data.getBooleanExtra("deleted", false)) {
+                // 详情页删除了邮件：重新读本地缓存（已自动过滤回收站）
+                setList(MailCache.getInstance(MainActivity.this).getAll());
+            } else {
+                applyFilter();
+            }
+        } else if (req == REQ_TRASH) {
+            // 回收站里可能恢复了邮件：重新读本地缓存刷新列表
+            setList(MailCache.getInstance(MainActivity.this).getAll());
         } else if (req == REQ_INSTALL_PERM && pendingUpdate != null) {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O
                     || getPackageManager().canRequestPackageInstalls()) {
@@ -502,6 +556,10 @@ public class MainActivity extends Activity {
         if (item.getItemId() == R.id.menu_add) { showAddDialog(); return true; }
         if (item.getItemId() == R.id.menu_refresh) { refresh(); return true; }
         if (item.getItemId() == R.id.menu_accounts) { showAccountsDialog(); return true; }
+        if (item.getItemId() == R.id.menu_trash) {
+            startActivityForResult(new Intent(this, TrashActivity.class), REQ_TRASH);
+            return true;
+        }
         if (item.getItemId() == R.id.menu_ai) { showAiDialog(); return true; }
         if (item.getItemId() == R.id.menu_check_update) { checkUpdate(); return true; }
         return super.onOptionsItemSelected(item);
@@ -510,6 +568,7 @@ public class MainActivity extends Activity {
     /* ------------------------- 应用内更新 ------------------------- */
 
     private static final int REQ_INSTALL_PERM = 2003;
+    private static final int REQ_TRASH = 2004;
     private Updater.UpdateInfo pendingUpdate;
 
     private void checkUpdate() {
