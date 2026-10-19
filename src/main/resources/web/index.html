@@ -11,17 +11,22 @@
   <div class="brand">📧 邮箱大师</div>
   <div class="actions">
     <span id="demoBadge" class="badge demo" hidden>演示</span>
+    <span id="unreadBadge" class="badge unread-badge" hidden></span>
     <button id="refreshBtn" class="icon-btn" title="刷新">⟳</button>
     <button id="addBtn" class="icon-btn" title="添加账户">＋</button>
     <button id="composeBtn" class="icon-btn" title="写邮件">✎</button>
+    <button id="draftsBtn" class="icon-btn" title="草稿箱">📝<i id="draftCount" class="count-badge" hidden></i></button>
+    <button id="trashBtn" class="icon-btn" title="回收站">🗑<i id="trashCount" class="count-badge" hidden></i></button>
+    <button id="aiBtn" class="icon-btn" title="AI 分类设置">🤖</button>
   </div>
 </header>
 
 <main class="container">
   <section id="accounts" class="accounts"></section>
-  <h3 class="section-title">收件箱</h3>
+  <h3 class="section-title">收件箱 <span id="inboxCount" class="dim"></span></h3>
   <section id="inbox" class="inbox"></section>
   <p id="empty" class="empty" hidden>收件箱为空</p>
+  <button id="olderBtn" class="older-btn" hidden>📜 加载更早的邮件</button>
 </main>
 
 <!-- 邮件详情 -->
@@ -29,7 +34,11 @@
   <div class="modal-card">
     <div class="modal-head"><span id="msgSubject"></span><button class="close" data-close>✕</button></div>
     <div class="msg-meta" id="msgMeta"></div>
+    <p id="msgRetryHint" class="retry-hint" hidden>正文加载失败？<button id="msgRetryBtn" class="link-btn">重新加载正文</button></p>
     <iframe id="msgBody" class="msg-body"></iframe>
+    <div class="modal-foot">
+      <button id="msgDeleteBtn" class="danger-btn">移入回收站</button>
+    </div>
   </div>
 </div>
 
@@ -60,7 +69,47 @@
     <label>收件人<input id="composeTo" type="email" placeholder="to@example.com"></label>
     <label>主题<input id="composeSubject"></label>
     <label>正文<textarea id="composeBody" rows="6"></textarea></label>
-    <button id="composeSubmit" class="primary">发送</button>
+    <div class="btn-row">
+      <button id="composeDraftBtn" class="ghost-btn">存草稿</button>
+      <button id="composeSubmit" class="primary">发送</button>
+    </div>
+  </div>
+</div>
+
+<!-- 草稿箱 -->
+<div id="draftsModal" class="modal" hidden>
+  <div class="modal-card">
+    <div class="modal-head"><span>草稿箱</span><button class="close" data-close>✕</button></div>
+    <div id="draftList" class="row-list"></div>
+    <p id="draftEmpty" class="empty" hidden>暂无草稿</p>
+    <button id="draftClearBtn" class="danger-btn wide" hidden>清空草稿箱</button>
+  </div>
+</div>
+
+<!-- 回收站 -->
+<div id="trashModal" class="modal" hidden>
+  <div class="modal-card">
+    <div class="modal-head"><span>回收站</span><button class="close" data-close>✕</button></div>
+    <div id="trashList" class="row-list"></div>
+    <p id="trashEmpty" class="empty" hidden>回收站为空</p>
+    <button id="trashClearBtn" class="danger-btn wide" hidden>清空回收站</button>
+  </div>
+</div>
+
+<!-- AI 分类设置 -->
+<div id="aiModal" class="modal" hidden>
+  <div class="modal-card">
+    <div class="modal-head"><span>AI 智能分类设置</span><button class="close" data-close>✕</button></div>
+    <p class="hint">接入 OpenAI 兼容接口（如 DeepSeek）批量识别 重要/推广/社交/其他。未启用时自动使用本地规则分类，绝不中断。</p>
+    <label class="switch-label"><input id="aiEnabled" type="checkbox"> 启用 AI 分类</label>
+    <label>API Key<input id="aiKey" type="password" placeholder="sk-...（留空表示不修改）"></label>
+    <label>接口地址<input id="aiBaseUrl" placeholder="https://api.deepseek.com/v1"></label>
+    <label>模型<input id="aiModel" placeholder="deepseek-chat"></label>
+    <p class="hint" id="aiTestResult"></p>
+    <div class="btn-row">
+      <button id="aiTestBtn" class="ghost-btn">测试连接</button>
+      <button id="aiSaveBtn" class="primary">保存</button>
+    </div>
   </div>
 </div>
 

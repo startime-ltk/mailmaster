@@ -6,7 +6,7 @@
 
     <groupId>com.mailmaster</groupId>
     <artifactId>mailmaster</artifactId>
-    <version>1.0.0</version>
+    <version>1.20</version>
     <packaging>jar</packaging>
 
     <properties>

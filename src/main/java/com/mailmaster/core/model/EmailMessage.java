@@ -7,7 +7,7 @@ import java.util.Date;
  * 多端共享，未来 Web / 小程序直接复用此结构。
  */
 public class EmailMessage {
-    private String id;             // 稳定唯一 id：账户id + 接收时间戳
+    private String id;             // 稳定唯一 id：账户id + ":" + UID（v1.20 起改用 UID，跨会话稳定）
     private String accountId;
     private String accountEmail;
     private String from;
@@ -17,6 +17,8 @@ public class EmailMessage {
     private String bodyHtml;       // HTML 正文（用于 WebView 渲染）
     private Date sentDate;
     private boolean read;
+    private long uid = -1;         // IMAP UID：增量同步与已读回写的锚点
+    private String category;       // 智能分类：重要 / 推广 / 社交 / 其他
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
@@ -38,4 +40,14 @@ public class EmailMessage {
     public void setSentDate(Date sentDate) { this.sentDate = sentDate; }
     public boolean isRead() { return read; }
     public void setRead(boolean read) { this.read = read; }
+    public long getUid() { return uid; }
+    public void setUid(long uid) { this.uid = uid; }
+    public String getCategory() { return category; }
+    public void setCategory(String category) { this.category = category; }
+
+    /** 正文是否为空（治「只有标题没内容」的防空覆盖判断用） */
+    public boolean hasContent() {
+        return (bodyText != null && !bodyText.trim().isEmpty())
+                || (bodyHtml != null && !bodyHtml.trim().isEmpty());
+    }
 }

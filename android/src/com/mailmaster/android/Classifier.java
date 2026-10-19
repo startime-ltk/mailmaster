@@ -87,7 +87,8 @@ public final class Classifier {
         if (containsAny(f, SOCIAL_SENDER) || containsAny(all, SOCIAL_WORDS)) return SOCIAL;
         if (containsAny(f, IMPORTANT_SENDER) || containsAny(all, IMPORTANT_WORDS)) return IMPORTANT;
         if (containsAny(f, BOT_SENDER)) return OTHER;
-        return IMPORTANT;
+        // 兜底是「其他」而不是「重要」：否则未命中任何规则的邮件也全进重要，重要类就失去意义
+        return OTHER;
     }
 
     /** AI 配置是否已可用（启用 + 有 Key） */

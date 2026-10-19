@@ -10,6 +10,12 @@
 - 写邮件时**任选发件账户**发出
 - 凭证 **AES 加密**本地存储，绝不明文
 - 定时自动刷新（默认 60 秒）
+- **UID 增量同步**：日常只拉新邮件；首次/邮箱重建拉最近 100 封；更早历史「加载更早」按需翻页
+- **智能分类**：本地规则兜底 + AI 批量分类（OpenAI 兼容接口，自填 Key，失败自动回退本地规则）
+- **回收站**：软删除 / 恢复 / 彻底删除 / 清空
+- **草稿箱**：写邮件退出自动保存、续写、发送后自动清除
+- **已读回写服务器**：打开即已读，换设备不再变未读
+- **单封重拉正文**：治「只有标题没内容」
 
 ## 技术栈
 - Java 20 + JavaFX 20（界面）
@@ -20,16 +26,19 @@
 ## 架构（为"多端"预留）
 ```
 core（纯 Java，不依赖任何 UI）         ← 多端共享
- ├─ model      账户 / 邮件 模型
+ ├─ model      账户 / 邮件 模型（含 UID / 分类）
  ├─ config     服务商连接预设（QQ/163/Outlook/Gmail）
  ├─ crypto     AES 加密
- ├─ service    H2 存储 / IMAP 收 / SMTP 发
+ ├─ service    H2 存储（账户+邮件缓存+水位+草稿）/ IMAP 收 / SMTP 发 / AI 设置
+ ├─ Classifier 智能分类（本地规则 + AI 批量）
  └─ MailEngine 门面，统一对外
 ui（JavaFX，本期实现）
  └─ 仅做界面与交互，全部逻辑委托 core
+web（JDK HttpServer，本期实现）
+ └─ 把 core 包成 REST + 静态页面，手机浏览器直接访问
 ```
-**多端预留关键**：所有邮件逻辑只在 `core`，UI 只是壳。未来做 Web / 小程序时，
-把 `core` 包成后端 API（Spring Boot 或 JDK HttpServer）即可复用全部逻辑，不用重写。
+**多端预留关键**：所有邮件逻辑只在 `core`，UI 只是壳。桌面端、网页版共用同一套 `core`，
+与安卓端（`android/`）保持同构：`MessageStore ↔ MailCache v3`、`MailReceiver ↔ MailService`、`Classifier ↔ Classifier`。
 
 ## 如何添加邮箱
 ### QQ 邮箱
@@ -96,22 +105,29 @@ mvn clean compile exec:java -Dexec.args=9090 # 指定端口 9090
 - 网页版启动后：本机访问 `http://localhost:8080`；**手机与电脑同一 WiFi 时**，
   访问 `http://<电脑局域网IP>:8080` 即可当 App 使用（界面为移动端样式）。
 - 网页版与桌面端**共用同一套账户库**（`~/.mailmaster/db`）：任一端添加账户，另一端也能看到。
-- 网页版对外暴露的最小 REST：`GET /api/status`、`GET /api/accounts`、`GET /api/inbox`、
-  `GET /api/messages/{id}`、`POST /api/accounts`、`POST /api/send`、`DELETE /api/accounts/{id}`、
-  `POST /api/demo/toggle`。要做小程序后端或自建前端，直接复用这套接口即可。
+- 网页版对外暴露的 REST（v1.20 起与桌面端功能拉齐）：
+  - 状态/账户：`GET /api/status`、`GET|POST /api/accounts`、`DELETE /api/accounts/{id}`
+  - 收件箱：`GET /api/inbox`、`GET /api/messages/{id}`（含分类 category / UID / hasContent）
+  - 单封操作：`POST /api/messages/{id}/read`（已读回写）、`POST /api/messages/{id}/trash`、`POST /api/messages/{id}/retry`（重拉正文）
+  - 回收站：`GET /api/trash`、`POST /api/trash/restore`、`DELETE /api/trash/{id}`、`POST /api/trash/purge-all`
+  - 草稿箱：`GET|POST /api/drafts`、`DELETE /api/drafts/{id}`
+  - 历史翻页：`GET|POST /api/older`
+  - 发送/演示：`POST /api/send`、`POST /api/demo/toggle`
+  - AI 分类：`GET|POST /api/ai`、`POST /api/ai/test`
+  - 要做小程序后端或自建前端，直接复用这套接口即可。
 
 ```bash
 mvn clean package          # 打包（可用 jpackage 进一步生成安装包）
 ```
 
 ## 最简使用：单文件 Jar（本机只需装 JDK）
-不想装 Maven、不想敲一长串命令？项目已打包出 **`dist/MailMaster.jar`**（约 5.5MB，已含全部依赖，且不含 JavaFX，Windows / macOS / Linux 通用）：
+不想装 Maven、不想敲一长串命令？项目已打包出 **`dist/MailMaster.jar`**（约 5.7MB，已含全部依赖，且不含 JavaFX，Windows / macOS / Linux 通用）：
 ```bash
 java -jar dist/MailMaster.jar          # 默认 8080 端口
 java -jar dist/MailMaster.jar 9090    # 指定端口 9090
 ```
 启动后本机浏览器开 `http://localhost:8080`；**手机与电脑同一 WiFi 时**开 `http://<电脑局域网IP>:8080` 即可当 App 使用。
-> 重新生成该 jar：`mvn clean package`（产物在 `target/mailmaster-1.0.0.jar`，已自动复制到 `dist/`）。
+> 重新生成该 jar：`mvn clean package`（产物在 `target/mailmaster-1.20.jar`，已自动复制到 `dist/`）。
 
 ## 演示模式（没有授权码也能先看效果）
 授权码还没搞定、或只想先看看界面长什么样时，直接启动即可：

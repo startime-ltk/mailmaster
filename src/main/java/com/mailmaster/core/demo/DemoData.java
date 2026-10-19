@@ -1,5 +1,6 @@
 package com.mailmaster.core.demo;
 
+import com.mailmaster.core.Classifier;
 import com.mailmaster.core.model.EmailAccount;
 import com.mailmaster.core.model.EmailMessage;
 
@@ -121,9 +122,20 @@ public final class DemoData {
         m.setSubject(subject);
         m.setSentDate(new Date(now - minutesAgo * 60_000L));
         m.setRead(minutesAgo > 300);
-        m.setBodyText(subject);
+        m.setBodyText(stripHtml(bodyInner));
         m.setBodyHtml(html(bodyInner));
+        // 演示数据同样过一遍本地规则分类，让"智能分类"在演示模式下可见（纯本地，无网络）
+        m.setCategory(Classifier.classify(m.getFrom(), m.getSubject(), m.getBodyText()));
         return m;
+    }
+
+    /** 去掉 HTML 标签，得到正文纯文本（分类规则的判断依据） */
+    private static String stripHtml(String s) {
+        return s.replaceAll("(?i)<br\\s*/?>", " ")
+                .replaceAll("(?i)</p>", " ")
+                .replaceAll("<[^>]+>", "")
+                .replaceAll("\\s+", " ")
+                .trim();
     }
 
     /** 包一层简单样式，让 WebView 渲染出来像"真邮件" */
