@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>邮箱大师 v1.21 · 桌面端功能拉齐（B3）</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: #f1f5f9; color: #1e293b; line-height: 1.7; padding: 32px 16px; }
+  .wrap { max-width: 780px; margin: 0 auto; }
+  .hero { background: linear-gradient(135deg, #4338CA, #0F766E); border-radius: 18px; padding: 36px 32px; color: #fff; margin-bottom: 24px; box-shadow: 0 10px 30px rgba(67,56,202,.25); }
+  .hero .tag { display: inline-block; background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.35); border-radius: 999px; padding: 2px 14px; font-size: 13px; margin-bottom: 14px; }
+  .hero h1 { font-size: 26px; margin-bottom: 10px; }
+  .hero p { font-size: 15px; opacity: .92; }
+  .card { background: #fff; border-radius: 16px; padding: 26px 28px; margin-bottom: 20px; border: 1px solid #e2e8f0; box-shadow: 0 2px 8px rgba(15,23,42,.04); }
+  .card h2 { font-size: 18px; color: #4338ca; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 2px solid #eef2ff; }
+  .card h3 { font-size: 15px; margin: 16px 0 8px; color: #334155; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13.5px; }
+  th { background: #f8fafc; text-align: left; padding: 9px 12px; border: 1px solid #e2e8f0; color: #475569; }
+  td { padding: 9px 12px; border: 1px solid #e2e8f0; vertical-align: top; }
+  code { background: #f1f5f9; border-radius: 5px; padding: 1px 7px; font-size: 12.5px; color: #be185d; font-family: Consolas, monospace; }
+  .note { background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 13px 16px; font-size: 13px; color: #92400e; margin-top: 12px; }
+  .ok { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 13px 16px; font-size: 13px; color: #166534; margin-top: 12px; }
+  .fix { background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px; padding: 13px 16px; font-size: 13px; color: #991b1b; margin-top: 12px; }
+  ul { padding-left: 22px; font-size: 14px; }
+  li { margin: 5px 0; }
+  .flow { display: flex; flex-direction: column; margin: 14px 0; }
+  .step { display: flex; align-items: flex-start; gap: 14px; }
+  .step .num { flex: 0 0 30px; height: 30px; border-radius: 50%; background: #4338ca; color: #fff; font-weight: 700; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+  .step .body { flex: 1; padding-bottom: 18px; border-left: 2px dashed #cbd5e1; margin-left: 15px; padding-left: 18px; margin-top: 4px; }
+  .step:last-child .body { border-left-color: transparent; padding-bottom: 4px; }
+  .step .body b { display: block; font-size: 14.5px; }
+  .step .body span { font-size: 13px; color: #64748b; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; }
+  .mini { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; font-size: 13px; }
+  .mini b { display: block; color: #4338ca; font-size: 13.5px; margin-bottom: 3px; }
+  /* ---- 桌面端窗口模拟 ---- */
+  .mockwin { background: #fff; border: 1px solid #cbd5e1; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 24px rgba(15,23,42,.10); margin-top: 12px; }
+  .mockbar { background: #2b2f36; color: #fff; padding: 8px 14px; display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .mockbar .dots { display: flex; gap: 5px; margin-right: 6px; }
+  .mockbar .dots i { width: 10px; height: 10px; border-radius: 50%; }
+  .mockbar .tbtn { background: rgba(255,255,255,.12); border-radius: 6px; padding: 3px 9px; font-size: 11.5px; margin-left: auto; }
+  .mockbody { padding: 12px 14px; background: #f8fafc; }
+  .mockrow { display: grid; grid-template-columns: 150px 1fr 1fr 92px 70px; gap: 6px; font-size: 11.5px; padding: 6px 8px; background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; margin-bottom: 4px; align-items: center; }
+  .mockrow.head { background: #eef2ff; font-weight: 600; color: #475569; border-color: #c7d2fe; }
+  .mockrow.unread { font-weight: 700; }
+  .mockrow .dim { color: #94a3b8; font-weight: 400; }
+  .catpill { font-size: 10.5px; padding: 1px 8px; border-radius: 8px; font-weight: 500; white-space: nowrap; }
+  .cat-imp { background: #fff1f0; color: #cf1322; }
+  .cat-promo { background: #fff7e6; color: #d46b08; }
+  .cat-oth { background: #f5f5f5; color: #8c8c8c; }
+  /* ---- 手机框模拟 ---- */
+  .phone { width: 300px; margin: 14px auto 0; border: 8px solid #1e293b; border-radius: 28px; overflow: hidden; background: #f2f3f5; box-shadow: 0 12px 32px rgba(15,23,42,.18); }
+  .phone .pbar { background: #2b2f36; color: #fff; padding: 9px 12px; display: flex; align-items: center; font-size: 12px; gap: 6px; }
+  .phone .pbar .pbtn { margin-left: auto; background: rgba(255,255,255,.14); border-radius: 50%; width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; }
+  .phone .pbody { padding: 10px; min-height: 300px; }
+  .pcard { background: #fff; border-radius: 8px; padding: 9px 11px; margin-bottom: 7px; box-shadow: 0 1px 2px rgba(0,0,0,.05); font-size: 11.5px; }
+  .pcard .top { display: flex; gap: 5px; align-items: center; margin-bottom: 3px; }
+  .ptag { font-size: 9.5px; color: #fff; padding: 0 6px; border-radius: 6px; }
+  .pcard .subj { font-weight: 600; font-size: 12px; }
+  .pcard .from { color: #666; font-size: 10.5px; }
+  .pmore { text-align: center; background: #fff; border-radius: 8px; padding: 8px; font-size: 11px; color: #1677ff; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+  .cmp td:first-child { font-weight: 600; white-space: nowrap; }
+  .old { color: #b91c1c; } .new { color: #166534; font-weight: 600; }
+  @media (max-width: 560px){ .grid2 { grid-template-columns: 1fr; } .hero { padding: 26px 20px; } .mockrow { grid-template-columns: 110px 1fr 70px; } .mockrow .hide-m { display: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hero">
+    <span class="tag">v1.21 · 桌面端 versionName 1.20 ｜ 安卓 versionCode 22</span>
+    <h1>🖥️ 桌面端功能拉齐（B3）：本地持久化 + 智能分类 + 回收站 / 草稿箱 / 加载更早 / AI 设置</h1>
+    <p>桌面端（JavaFX）与网页版一次性补齐安卓端已有能力：三端同一套 core 逻辑，两端代码同构可对照评审。同时修复智能分类的兜底缺陷——未命中规则的邮件不再一律进「重要」。</p>
+  </div>
+
+  <div class="card">
+    <h2>一、三端格局（v1.21 起）</h2>
+    <table class="cmp">
+      <tr><th style="width:22%">端</th><th>形态</th><th>v1.21 状态</th></tr>
+      <tr><td>安卓 App</td><td>原生 APK（android/ 目录，CI 自动构建）</td><td class="new">v1.21 已发布（分类兜底修复随包）</td></tr>
+      <tr><td>桌面端</td><td>JavaFX 窗口（ui/ 包）</td><td class="new">v1.21 功能拉齐：分类列 / 回收站 / 草稿箱 / 加载更早 / AI 设置 / 打开标已读</td></tr>
+      <tr><td>网页版</td><td>JDK HttpServer REST + 移动端页面（web/ 包）</td><td class="new">v1.21 API 全套拉齐，手机浏览器直接访问</td></tr>
+    </table>
+    <div class="ok">✅ 三端共享同一套 core：<code>MessageStore ↔ MailCache v3</code>（H2 三表 ↔ SQLite 三表，字段一一对应）、<code>MailReceiver ↔ MailService</code>、<code>Classifier ↔ Classifier</code>。评审时可直接两端对照。</div>
+  </div>
+
+  <div class="card">
+    <h2>二、桌面端新界面（模拟）</h2>
+    <p style="font-size:14px">表格新增「分类」列；未读邮件整行加粗；工具栏新增草稿箱 / 回收站 / 更早邮件 / AI 设置入口；标题栏实时显示未读、回收站、草稿计数。</p>
+    <div class="mockwin">
+      <div class="mockbar">
+        <span class="dots"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></span>
+        邮箱大师 — 未读 3 ｜ 回收站 1 ｜ 草稿 2
+        <span class="tbtn">+ 添加账户</span><span class="tbtn">✎ 写邮件</span><span class="tbtn">⟳</span><span class="tbtn">📝</span><span class="tbtn">🗑</span><span class="tbtn">📜</span><span class="tbtn">🤖</span>
+      </div>
+      <div class="mockbody">
+        <div class="mockrow head"><span>发件人</span><span>主题</span><span class="hide-m">收件账户</span><span>分类</span><span>时间</span></div>
+        <div class="mockrow unread"><span>学校教务处</span><span>【重要】网上选课通知</span><span class="hide-m dim">demo-qq</span><span><span class="catpill cat-imp">重要</span></span><span class="dim">刚刚</span></div>
+        <div class="mockrow unread"><span>网易公开课</span><span>本周上新：数据可视化</span><span class="hide-m dim">demo-163</span><span><span class="catpill cat-promo">推广</span></span><span class="dim">40 分钟前</span></div>
+        <div class="mockrow"><span>GitHub</span><span>[mailmaster] 构建结果：通过</span><span class="hide-m dim">demo-qq</span><span><span class="catpill cat-oth">其他</span></span><span class="dim">1 小时前</span></div>
+        <div class="mockrow"><span>Microsoft Teams</span><span>会议邀请：项目进度同步</span><span class="hide-m dim">demo-outlook</span><span><span class="catpill cat-oth">其他</span></span><span class="dim">昨天</span></div>
+      </div>
+    </div>
+    <div class="grid2">
+      <div class="mini"><b>打开即已读</b>点开任意邮件：本地缓存立即标记已读并整行取消加粗，同时<b>异步回写服务器</b>（按 UID 精确定位）——换设备打开不会再变未读。</div>
+      <div class="mini"><b>回收站（软删除）</b>右键「移入回收站」：列表消失但服务器原件不动；对话框内可恢复 / 彻底删除 / 清空。</div>
+      <div class="mini"><b>草稿箱</b>写邮件取消时自动保存；点「📝」续写或删除；发送成功后草稿自动清除。</div>
+      <div class="mini"><b>加载更早</b>列表底部「📜 加载更早的邮件」，每批 30 封；水位到 UID 1 后入口自动消失。</div>
+      <div class="mini"><b>AI 智能分类</b>「🤖」填 OpenAI 兼容 Key（默认 DeepSeek）；保存后可先「测试连接」再启用；失败自动回退本地规则。</div>
+      <div class="mini"><b>本地持久化</b>邮件进 H2（messages / sync_state / drafts 三表同库），重启不丢、离线可看、列表秒开。</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>三、网页版新界面（手机模拟）</h2>
+    <p style="font-size:14px">网页版与桌面端共用同一账户库；顶栏新增草稿箱 / 回收站 / AI 设置（带计数角标），邮件卡片显示分类徽标与删除按钮，详情页支持「重新加载正文」。</p>
+    <div class="phone">
+      <div class="pbar">📧 邮箱大师 <span class="pbtn">📝2</span><span class="pbtn">🗑1</span><span class="pbtn">🤖</span><span class="pbtn">✎</span><span class="pbtn">⟳</span></div>
+      <div class="pbody">
+        <div class="pcard"><div class="top"><span class="ptag" style="background:#f5a623">demo-qq</span><span class="catpill cat-imp">重要</span><span style="margin-left:auto;color:#1677ff;font-size:9px">●</span></div><div class="subj">【重要】网上选课通知</div><div class="from">学校教务处 · 刚刚</div></div>
+        <div class="pcard"><div class="top"><span class="ptag" style="background:#d4282d">demo-163</span><span class="catpill cat-promo">推广</span><span style="margin-left:auto;color:#1677ff;font-size:9px">●</span></div><div class="subj">本周上新：数据可视化</div><div class="from">网易公开课 · 40 分钟前</div></div>
+        <div class="pcard"><div class="top"><span class="ptag" style="background:#f5a623">demo-qq</span><span class="catpill cat-oth">其他</span></div><div class="subj">[mailmaster] 构建结果：通过</div><div class="from">GitHub · 1 小时前</div></div>
+        <div class="pmore">📜 加载更早的邮件</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>四、修复：智能分类兜底从「重要」改为「其他」</h2>
+    <p style="font-size:14px">旧规则里，未命中任何关键词的邮件一律落入 <span class="old">「重要」</span>——结果是随便一封邮件都是重要的，「重要」分类反而失去筛选意义。</p>
+    <table class="cmp">
+      <tr><th style="width:34%">场景</th><th>旧行为</th><th>新行为（v1.21，两端同步）</th></tr>
+      <tr><td>教务处「选课通知」</td><td>重要 ✅</td><td class="new">重要 ✅（命中「选课 / 教务处」）</td></tr>
+      <tr><td>「登录验证码 8842」</td><td>重要 ✅</td><td class="new">重要 ✅（命中「验证码」）</td></tr>
+      <tr><td>课程推广「限时免费领取」</td><td class="old">重要 ❌</td><td class="new">推广 ✅（命中「限时」）</td></tr>
+      <tr><td>GitHub「构建结果」</td><td class="old">重要 ❌</td><td class="new">其他 ✅（noreply 机器人地址）</td></tr>
+      <tr><td>「会议邀请：进度同步」</td><td class="old">重要 ❌</td><td class="new">其他 ✅（无命中即归其他）</td></tr>
+    </table>
+    <div class="fix">🔧 修复方式：本地规则 <code>classify()</code> 兜底分支改为返回「其他」。安卓端与桌面端同一处同步修改，规则完全一致。AI 分类（若启用）仍会覆盖本地结果。</div>
+    <div class="ok">✅ 演示数据同步增强：每封演示邮件生成时过一遍本地规则分类，正文改为 HTML 剥离后的纯文本（分类信号更完整）——演示模式即可看到「重要 3 / 推广 1 / 其他 3」的分布效果。</div>
+  </div>
+
+  <div class="card">
+    <h2>五、网页版 REST API（v1.21 全套）</h2>
+    <table>
+      <tr><th style="width:44%">端点</th><th>说明</th></tr>
+      <tr><td><code>GET /api/status</code></td><td>演示模式 / 未读数 / 回收站数 / 草稿数 / 有无更早</td></tr>
+      <tr><td><code>GET|POST /api/accounts</code>、<code>DELETE /api/accounts/{id}</code></td><td>账户增删查（级联清理邮件缓存 + 水位 + 草稿）</td></tr>
+      <tr><td><code>GET /api/inbox</code>、<code>GET /api/messages/{id}</code></td><td>收件箱 / 详情（含 category、uid、hasContent）</td></tr>
+      <tr><td><code>POST /api/messages/{id}/read</code></td><td>已读回写（本地即更新 + 异步回写服务器）</td></tr>
+      <tr><td><code>POST /api/messages/{id}/trash</code></td><td>移入回收站（软删除）</td></tr>
+      <tr><td><code>POST /api/messages/{id}/retry</code></td><td>单封重拉正文（治「只有标题没内容」）</td></tr>
+      <tr><td><code>GET /api/trash</code>、<code>POST /api/trash/restore</code>、<code>DELETE /api/trash/{id}</code>、<code>POST /api/trash/purge-all</code></td><td>回收站列表 / 恢复 / 彻底删除 / 清空</td></tr>
+      <tr><td><code>GET|POST /api/drafts</code>、<code>DELETE /api/drafts/{id}</code></td><td>草稿箱保存（id≤0 新建，&gt;0 覆盖）/ 列表 / 删除</td></tr>
+      <tr><td><code>GET|POST /api/older</code></td><td>查询 / 触发加载更早（每批 30 封）</td></tr>
+      <tr><td><code>GET|POST /api/ai</code>、<code>POST /api/ai/test</code></td><td>AI 分类设置读写（Key 掩码回显，留空不修改）/ 测试连接</td></tr>
+      <tr><td><code>POST /api/send</code>、<code>POST /api/demo/toggle</code></td><td>发信（演示模式短路不联网）/ 演示模式开关</td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>六、验证记录</h2>
+    <div class="flow">
+      <div class="step"><div class="num">1</div><div class="body"><b>桌面端编译</b><span><code>mvn compile</code> 一次通过（core + ui + web 全量，含新增 MessageStore / Classifier / AiSettings）。</span></div></div>
+      <div class="step"><div class="num">2</div><div class="body"><b>单文件 Jar 独立运行</b><span><code>mvn package</code> 产出 <code>mailmaster-1.20.jar</code>（5.7MB，含全部依赖、不含 JavaFX）；<code>java -jar</code> 直接启动网页版，演示模式 API 与页面均正常。</span></div></div>
+      <div class="step"><div class="num">3</div><div class="body"><b>全端点实测（curl）</b><span>status / inbox / read / trash / restore / purge-all / drafts CRUD / older / ai GET·POST（掩码保留逻辑）/ 静态页 200 / 404 兜底——全部符合预期。</span></div></div>
+      <div class="step"><div class="num">4</div><div class="body"><b>分类兜底修复复测</b><span>修复后演示数据分布：重要 3 / 推广 1 / 其他 3，四类语义清晰；安卓端同一修复已随 v1.21 APK 发布（versionCode 22）。</span></div></div>
+    </div>
+    <div class="note">📌 说明：桌面端 JavaFX 界面在无显示服务器环境下只能编译验证，无法跑 GUI 截图；界面以上方 HTML 模拟图为准（与 MainApp 实际布局一致）。APK 由 CI 在 tag 推送后自动构建并附 Release。</div>
+  </div>
+
+  <div class="card">
+    <h2>七、下一步（未排期）</h2>
+    <ul>
+      <li><b>C1</b>：Keystore 加固（release 签名替代 debug keystore，需在仓库 Secret 配置）</li>
+      <li><b>D 类打磨</b>：桌面端深色模式 / 未读角标 / 会话视图 / 列表左滑操作</li>
+      <li><b>E 类工程化</b>：单元测试补全、日志规范、CI 增加桌面端构建校验</li>
+    </ul>
+  </div>
+
+</div>
+</body>
+</html>
