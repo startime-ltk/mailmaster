@@ -26,6 +26,10 @@ public class ComposeActivity extends Activity {
     private Spinner spinner;
     private final List<File> files = new ArrayList<>();
 
+    /** 正在编辑的草稿 id；-1 表示新邮件（非草稿续写） */
+    private long draftId = -1;
+    private EditText etTo, etSubj, etBody;
+
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
@@ -42,29 +46,44 @@ public class ComposeActivity extends Activity {
         findViewById(R.id.btn_back).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                autoSaveDraft();   // 返回即存草稿：写了一半退出不丢
                 finish();
             }
         });
 
-        final EditText to = findViewById(R.id.et_to);
-        final EditText subj = findViewById(R.id.et_subject);
-        final EditText body = findViewById(R.id.et_body);
+        etTo = findViewById(R.id.et_to);
+        etSubj = findViewById(R.id.et_subject);
+        etBody = findViewById(R.id.et_body);
         final TextView clear = findViewById(R.id.btn_clear_attach);
         Button send = findViewById(R.id.btn_send);
+
+        // 草稿续写：带 draftId 进入时恢复各字段（附件不随草稿保存，见类注释）
+        draftId = getIntent().getLongExtra("draftId", -1);
+        if (draftId > 0) {
+            DraftStore.Draft d = DraftStore.getInstance(this).get(draftId);
+            if (d != null) {
+                etTo.setText(nz(d.to));
+                etSubj.setText(nz(d.subject));
+                etBody.setText(nz(d.body));
+                selectAccount(d.accountId);
+            } else {
+                draftId = -1; // 草稿已被删（如另一台操作），按新邮件处理
+            }
+        }
 
         Intent it = getIntent();
         String mode = it.getStringExtra("mode");
         MailMessage ref = (MailMessage) it.getSerializableExtra("msg");
         if (ref != null) {
             if ("reply".equals(mode)) {
-                to.setText(ref.fromAddress());
-                subj.setText(ref.replySubject());
-                body.setText(ref.quoted());
-                body.setSelection(0); // 光标停在开头，方便直接写正文
+                etTo.setText(ref.fromAddress());
+                etSubj.setText(ref.replySubject());
+                etBody.setText(ref.quoted());
+                etBody.setSelection(0); // 光标停在开头，方便直接写正文
             } else if ("forward".equals(mode)) {
-                subj.setText(ref.forwardSubject());
-                body.setText(ref.quoted());
-                body.setSelection(0);
+                etSubj.setText(ref.forwardSubject());
+                etBody.setText(ref.quoted());
+                etBody.setSelection(0);
             }
         }
 
@@ -83,17 +102,26 @@ public class ComposeActivity extends Activity {
         });
         refreshAttachLabel();
 
+        // 存草稿：立即落盘并退出（明示保存，区别于返回时的自动保存）
+        findViewById(R.id.btn_save_draft).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                saveDraft(true);
+                finish();
+            }
+        });
+
         send.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 final MailAccount from = (MailAccount) spinner.getSelectedItem();
-                final String t = to.getText().toString().trim();
+                final String t = etTo.getText().toString().trim();
                 if (from == null || t.isEmpty()) {
                     Toast.makeText(ComposeActivity.this, R.string.toast_fill_to, Toast.LENGTH_SHORT).show();
                     return;
                 }
-                final String s = subj.getText().toString();
-                final String bd = body.getText().toString();
+                final String s = etSubj.getText().toString();
+                final String bd = etBody.getText().toString();
                 final List<File> atts = new ArrayList<>(files);
 
                 // 真实发送必须放到子线程：安卓禁止在主线程联网，
@@ -111,13 +139,76 @@ public class ComposeActivity extends Activity {
                                         ok ? R.string.send_real_ok : R.string.send_fail,
                                         Toast.LENGTH_LONG).show();
                                 v.setEnabled(true);
-                                if (ok) ComposeActivity.this.finish();
+                                if (ok) {
+                                    // 发送成功：若这是草稿续写，把草稿从草稿箱移除
+                                    if (draftId > 0) {
+                                        DraftStore.getInstance(ComposeActivity.this).delete(draftId);
+                                    }
+                                    ComposeActivity.this.finish();
+                                }
                             }
                         });
                     }
                 }).start();
             }
         });
+    }
+
+    /** 系统返回键同样走「自动存草稿」，与工具栏返回一致 */
+    @Override
+    public void onBackPressed() {
+        autoSaveDraft();
+        super.onBackPressed();
+    }
+
+    /**
+     * 自动保存草稿（返回时调用）：
+     *  - 收件人/主题/正文有任一非空 → 存盘（新建或按 draftId 覆盖）；
+     *  - 全部为空且原是草稿续写 → 用户清空了内容，删掉这封草稿；
+     *  - 全部为空的新邮件 → 什么都不做，不产生空草稿。
+     */
+    private void autoSaveDraft() {
+        String t = etTo.getText().toString().trim();
+        String s = etSubj.getText().toString().trim();
+        String b = etBody.getText().toString().trim();
+        boolean empty = t.isEmpty() && s.isEmpty() && b.isEmpty();
+        if (empty) {
+            if (draftId > 0) DraftStore.getInstance(this).delete(draftId);
+            return;
+        }
+        saveDraft(false);
+    }
+
+    /** 明示保存：写库并提示（用于「存草稿」按钮） */
+    private void saveDraft(boolean toast) {
+        MailAccount from = (MailAccount) spinner.getSelectedItem();
+        DraftStore.Draft d = new DraftStore.Draft();
+        d.id = draftId;
+        d.accountId = (from != null) ? from.id : "";
+        d.accountEmail = (from != null) ? from.email : "";
+        d.to = etTo.getText().toString();
+        d.subject = etSubj.getText().toString();
+        d.body = etBody.getText().toString();
+        draftId = DraftStore.getInstance(this).save(d);
+        if (toast) {
+            Toast.makeText(this, R.string.toast_draft_saved, Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /** 按账户 id 选中发件账户（草稿续写时恢复原发件人） */
+    private void selectAccount(String accountId) {
+        if (accountId == null || accountId.isEmpty()) return;
+        List<MailAccount> accs = MainActivity.store.accounts;
+        for (int i = 0; i < accs.size(); i++) {
+            if (accs.get(i).id.equals(accountId)) {
+                spinner.setSelection(i);
+                return;
+            }
+        }
+    }
+
+    private static String nz(String s) {
+        return (s == null) ? "" : s;
     }
 
     private void preselectAccount() {

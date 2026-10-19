@@ -133,4 +133,27 @@
     <string name="loading_older">正在加载更早的邮件…</string>
     <string name="toast_loaded_older">已加载更早的邮件</string>
     <string name="no_older">没有更早的邮件了</string>
+
+    <!-- 草稿箱 -->
+    <string name="menu_drafts">草稿箱</string>
+    <string name="menu_drafts_count">草稿箱（%1$d）</string>
+    <string name="drafts_title">草稿箱</string>
+    <string name="drafts_hint">没有草稿。写邮件时点「存草稿」，或直接返回都会自动保存。</string>
+    <string name="drafts_empty">暂无草稿</string>
+    <string name="drafts_saved_at">保存于 %1$s</string>
+    <string name="btn_save_draft">存草稿</string>
+    <string name="drafts_clear">清空</string>
+    <string name="drafts_delete_title">删除这封草稿？</string>
+    <string name="drafts_delete_msg">删除后无法恢复。</string>
+    <string name="drafts_clear_title">清空草稿箱？</string>
+    <string name="drafts_clear_msg">将删除全部 %1$d 封草稿，无法恢复。</string>
+    <string name="toast_draft_saved">已存入草稿箱</string>
+    <string name="toast_draft_deleted">草稿已删除</string>
+    <string name="toast_drafts_cleared">草稿箱已清空</string>
+
+    <!-- 单封重试（B4） -->
+    <string name="btn_retry_body">重新加载正文</string>
+    <string name="retrying_body">正在重新加载…</string>
+    <string name="retry_body_ok">正文已更新</string>
+    <string name="retry_body_fail">仍未取到正文：服务器暂时无响应或该邮件格式特殊</string>
 </resources>

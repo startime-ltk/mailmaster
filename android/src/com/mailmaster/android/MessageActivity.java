@@ -16,6 +16,7 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -88,7 +89,69 @@ public class MessageActivity extends Activity {
         renderBody();
         bindReplyForward();
         bindDelete();
+        bindRetryBody();
         markRead();
+    }
+
+    /** 「重新加载正文」按钮：仅真实账户（uid>0）且有意义时可见，点击按 UID 单封重拉 */
+    private void bindRetryBody() {
+        final View btn = findViewById(R.id.btn_retry_body);
+        btn.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { retryBody(); }
+        });
+    }
+
+    /** 单封重试入口的显隐：正文缺失 + 真实账户才显示 */
+    private void showRetryButton(boolean show) {
+        try {
+            View btn = findViewById(R.id.btn_retry_body);
+            boolean real = msg.uid > 0 && findAccount() != null;
+            btn.setVisibility((show && real) ? View.VISIBLE : View.GONE);
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * 单封重试（B4）：按 UID 重新拉取这一封邮件。
+     * 用于治「只有标题没内容」的残留——首次 100 封窗口里某封解析失败被缓存成空白，
+     * 这里给用户一个主动重拉的入口，成功后覆盖内存与本地缓存并重新渲染。
+     */
+    private void retryBody() {
+        final MailAccount acc = findAccount();
+        if (acc == null || msg.uid <= 0) return;
+        final Button btn = (Button) findViewById(R.id.btn_retry_body);
+        btn.setEnabled(false);
+        btn.setText(R.string.retrying_body);
+        new Thread(new Runnable() {
+            @Override public void run() {
+                final MailMessage fresh = MailService.fetchByUid(MessageActivity.this, acc, msg.uid);
+                runOnUiThread(new Runnable() {
+                    @Override public void run() {
+                        btn.setEnabled(true);
+                        btn.setText(R.string.btn_retry_body);
+                        boolean hasContent = fresh != null
+                                && ((fresh.body != null && fresh.body.trim().length() > 0)
+                                    || (fresh.html != null && fresh.html.trim().length() > 0));
+                        if (hasContent) {
+                            msg.body = fresh.body;
+                            msg.html = fresh.html;
+                            // 覆盖回写本地缓存（upsertAll 防空覆盖逻辑此时不会拦截：新内容非空）
+                            try {
+                                MailCache.getInstance(MessageActivity.this)
+                                        .upsertAll(java.util.Collections.singletonList(msg));
+                            } catch (Exception ignored) {
+                            }
+                            renderBody();
+                            Toast.makeText(MessageActivity.this, R.string.retry_body_ok,
+                                    Toast.LENGTH_SHORT).show();
+                        } else {
+                            Toast.makeText(MessageActivity.this, R.string.retry_body_fail,
+                                    Toast.LENGTH_LONG).show();
+                        }
+                    }
+                });
+            }
+        }).start();
     }
 
     /** 删除按钮：软删除移入回收站（服务器原件不动，可在回收站恢复） */
@@ -245,10 +308,12 @@ public class MessageActivity extends Activity {
             sv.setVisibility(View.VISIBLE);
             bodyTv.setText(msg.body);
         } else {
-            // HTML 与纯文本都为空：加密/签名邮件或格式特殊，给出明确提示而非一片空白
+            // HTML 与纯文本都为空：加密/签名邮件或格式特殊，给出明确提示而非一片空白，
+            // 同时亮出「重新加载正文」单封重试入口（仅真实账户可见）
             wv.setVisibility(View.GONE);
             sv.setVisibility(View.VISIBLE);
             bodyTv.setText(R.string.msg_body_unavailable);
+            showRetryButton(true);
         }
     }
 
@@ -260,6 +325,8 @@ public class MessageActivity extends Activity {
         wv.setVisibility(View.GONE);
         sv.setVisibility(View.VISIBLE);
         bodyTv.setText(msg.body == null ? "" : msg.body);
+        // 回退后正文仍为空：同样给重试入口
+        if (msg.body == null || msg.body.trim().length() == 0) showRetryButton(true);
     }
 
     private void bindReplyForward() {

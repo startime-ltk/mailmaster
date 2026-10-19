@@ -305,6 +305,29 @@ public class MailService {
     }
 
     /**
+     * 按 UID 重拉单封邮件（治「只有标题没内容」的单封重试入口）。
+     * 首次同步的 100 封窗口里若某封正文解析失败被缓存成空白，
+     * 用户可在详情页点「重新加载正文」单独重拉这一封，成功后覆盖回写缓存。
+     * 返回 null 表示账户无效、UID 无效或网络上就是拉不到。
+     */
+    public static MailMessage fetchByUid(Context ctx, MailAccount a, long uid) {
+        if (a == null || uid <= 0) return null;
+        try {
+            Store store = connectStore(a);
+            Folder inbox = store.getFolder("INBOX");
+            inbox.open(Folder.READ_ONLY);
+            Message m = ((UIDFolder) inbox).getMessageByUID(uid);
+            MailMessage out = (m != null) ? toMailMessage(ctx, a, m, uid) : null;
+            inbox.close(false);
+            store.close();
+            return out;
+        } catch (Exception e) {
+            Log.e("MailService", "fetchByUid failed: uid=" + uid, e);
+            return null;
+        }
+    }
+
+    /**
      * 把已读状态回写到服务器（按 IMAP UID 定位）。
      * 只改本地标记是不够的——换个设备打开又变未读，评委一眼就能看穿。
      */

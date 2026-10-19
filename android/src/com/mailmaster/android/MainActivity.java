@@ -103,6 +103,9 @@ public class MainActivity extends Activity {
 
         refresh();
 
+        // 点击分账户通知直达：若 Intent 带了 accountId，切到该账户的筛选视图
+        applyAccountFromIntent(getIntent());
+
         list.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> parent, View view, int pos, long id) {
@@ -132,6 +135,32 @@ public class MainActivity extends Activity {
         }
         // 按用户设置启动/停止后台自动收邮件任务
         AutoReceivePrefs.syncSchedule(this);
+    }
+
+    /** 通知点击直达（SINGLE_TOP 复用实例时走这里） */
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        applyAccountFromIntent(intent);
+    }
+
+    /**
+     * 通知点击直达：把列表切到指定账户（B5 分账户通知的落地动作）。
+     * 账户已不存在（删了）则忽略，保持当前视图。
+     */
+    private void applyAccountFromIntent(Intent it) {
+        if (it == null) return;
+        final String accId = it.getStringExtra("accountId");
+        if (accId == null || accId.isEmpty()) return;
+        for (int i = 0; i < store.accounts.size(); i++) {
+            if (store.accounts.get(i).id.equals(accId)) {
+                curAccount = accId;
+                if (spinnerAccount != null) spinnerAccount.setSelection(i + 1); // 触发监听→applyFilter
+                else applyFilter();
+                return;
+            }
+        }
     }
 
     @Override
@@ -249,6 +278,12 @@ public class MainActivity extends Activity {
                 trashItem.setTitle(trashCount > 0
                         ? getString(R.string.menu_trash_count, trashCount)
                         : getString(R.string.menu_trash));
+                // 草稿箱菜单项带数量角标
+                MenuItem draftsItem = pm.getMenu().findItem(R.id.menu_drafts);
+                int draftCount = DraftStore.getInstance(MainActivity.this).count();
+                draftsItem.setTitle(draftCount > 0
+                        ? getString(R.string.menu_drafts_count, draftCount)
+                        : getString(R.string.menu_drafts));
                 pm.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
                     @Override public boolean onMenuItemClick(MenuItem item) {
                         return onOptionsItemSelected(item);
@@ -714,6 +749,10 @@ public class MainActivity extends Activity {
             startActivityForResult(new Intent(this, TrashActivity.class), REQ_TRASH);
             return true;
         }
+        if (item.getItemId() == R.id.menu_drafts) {
+            startActivity(new Intent(this, DraftsActivity.class));
+            return true;
+        }
         if (item.getItemId() == R.id.menu_auto_receive) { showAutoReceiveDialog(); return true; }
         if (item.getItemId() == R.id.menu_ai) { showAiDialog(); return true; }
         if (item.getItemId() == R.id.menu_check_update) { checkUpdate(); return true; }
@@ -853,7 +892,8 @@ public class MainActivity extends Activity {
             del.setOnClickListener(new View.OnClickListener() {
                 @Override public void onClick(View v) {
                     store.removeAccount(a.id);
-                    // 账户没了：重排后台任务（无账户时会自动停排）
+                    // 账户没了：级联清理其草稿，并重排后台任务（无账户时会自动停排）
+                    DraftStore.getInstance(MainActivity.this).deleteAccount(a.id);
                     AutoReceivePrefs.syncSchedule(MainActivity.this);
                     if (accountDialog != null) accountDialog.dismiss();
                     curAccount = "all";

@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.mailmaster.android"
-    android:versionCode="20"
-    android:versionName="1.19">
+    android:versionCode="21"
+    android:versionName="1.20">
 
     <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34" />
     <uses-permission android:name="android.permission.INTERNET" />
@@ -40,6 +40,11 @@
             android:name=".TrashActivity"
             android:exported="false"
             android:label="@string/trash_title" />
+
+        <activity
+            android:name=".DraftsActivity"
+            android:exported="false"
+            android:label="@string/drafts_title" />
 
         <!-- 后台自动收邮件：BIND_JOB_SERVICE 权限是 JobScheduler 的硬性要求，缺失会直接调度失败 -->
         <service
