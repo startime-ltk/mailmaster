@@ -6,6 +6,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.CountDownLatch;
 import javax.activation.DataHandler;
 import javax.activation.FileDataSource;
 import javax.mail.Address;
@@ -30,15 +31,50 @@ public class MailService {
 
     private static final int MAX_FETCH = 30; // 只拉最近 N 封，避免首次打开卡死
 
+    /**
+     * 网络超时（毫秒）。不配超时时 JavaMail 默认无限等待，
+     * 弱网/服务器无响应会让界面假死数分钟——连接快速失败（8s），
+     * 读取（正文/附件下载）留足余量（15s）。
+     */
+    private static final int CONNECT_TIMEOUT_MS = 8000;
+    private static final int READ_TIMEOUT_MS = 15000;
+
+    /**
+     * 拉取全部账户。多账户并发执行（每账户一个线程 + CountDownLatch 汇总），
+     * 总耗时约等于最慢的一个账户，而非逐个相加；单个账户失败
+     * （密码错 / 超时 / 服务器拒连）只记日志，不影响其他账户结果。
+     * 各账户附件目录相互独立（attachments/&lt;accountId&gt;），并发无共享冲突。
+     */
     public static List<MailMessage> fetchAll(Context ctx, List<MailAccount> accounts) {
         List<MailMessage> out = new ArrayList<>();
-        for (MailAccount a : accounts) {
-            try {
-                out.addAll(fetchOne(ctx, a));
-            } catch (Exception e) {
-                Log.e("MailService", "fetch failed: " + a.email, e);
-            }
+        if (accounts == null || accounts.isEmpty()) return out;
+        final List<MailMessage> collected = new ArrayList<>();
+        final CountDownLatch latch = new CountDownLatch(accounts.size());
+        for (final MailAccount a : accounts) {
+            new Thread(new Runnable() {
+                @Override public void run() {
+                    try {
+                        List<MailMessage> part = fetchOne(ctx, a);
+                        if (part != null && !part.isEmpty()) {
+                            synchronized (collected) {
+                                collected.addAll(part);
+                            }
+                        }
+                    } catch (Exception e) {
+                        Log.e("MailService", "fetch failed: " + a.email, e);
+                    } finally {
+                        latch.countDown();
+                    }
+                }
+            }).start();
         }
+        try {
+            // 单账户已有 8s/15s 超时兜底，这里不会无限期等待
+            latch.await();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        out.addAll(collected);
         return out;
     }
 
@@ -99,6 +135,9 @@ public class MailService {
         p.put("mail.store.protocol", proto);
         p.put("mail." + proto + ".host", a.imapHost);
         p.put("mail." + proto + ".port", String.valueOf(a.imapPort));
+        // 超时保护：连接 8s / 读取 15s，防弱网挂死
+        p.put("mail." + proto + ".connectiontimeout", String.valueOf(CONNECT_TIMEOUT_MS));
+        p.put("mail." + proto + ".timeout", String.valueOf(READ_TIMEOUT_MS));
         Session s = session(p, a);
         Store store = s.getStore(proto);
         store.connect();
@@ -160,6 +199,9 @@ public class MailService {
             p.put("mail.store.protocol", proto);
             p.put("mail." + proto + ".host", a.imapHost);
             p.put("mail." + proto + ".port", String.valueOf(a.imapPort));
+            // 超时保护：连接 8s / 读取 15s
+            p.put("mail." + proto + ".connectiontimeout", String.valueOf(CONNECT_TIMEOUT_MS));
+            p.put("mail." + proto + ".timeout", String.valueOf(READ_TIMEOUT_MS));
             Session s = session(p, a);
             Store store = s.getStore(proto);
             store.connect();
@@ -187,6 +229,9 @@ public class MailService {
             p.put("mail.smtp.host", from.smtpHost);
             p.put("mail.smtp.port", String.valueOf(from.smtpPort));
             p.put("mail.smtp.auth", "true");
+            // 超时保护：连接 8s / 读写 15s，防弱网下发送卡死
+            p.put("mail.smtp.connectiontimeout", String.valueOf(CONNECT_TIMEOUT_MS));
+            p.put("mail.smtp.timeout", String.valueOf(READ_TIMEOUT_MS));
             if (from.useStartTls) {
                 p.put("mail.smtp.starttls.enable", "true");
             } else {

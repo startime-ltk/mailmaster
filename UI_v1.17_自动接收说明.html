@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>邮箱大师 v1.17 · 自动接收与通知</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: #f1f5f9; color: #1e293b; line-height: 1.7; padding: 32px 16px; }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  .hero { background: linear-gradient(135deg, #1565C0, #4F46E5); border-radius: 18px; padding: 36px 32px; color: #fff; margin-bottom: 24px; box-shadow: 0 10px 30px rgba(21,101,192,.25); }
+  .hero .tag { display: inline-block; background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.35); border-radius: 999px; padding: 2px 14px; font-size: 13px; margin-bottom: 14px; }
+  .hero h1 { font-size: 26px; margin-bottom: 10px; }
+  .hero p { font-size: 15px; opacity: .92; }
+  .card { background: #fff; border-radius: 16px; padding: 26px 28px; margin-bottom: 20px; border: 1px solid #e2e8f0; box-shadow: 0 2px 8px rgba(15,23,42,.04); }
+  .card h2 { font-size: 18px; color: #1565C0; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 2px solid #eff6ff; }
+  .card h3 { font-size: 15px; margin: 16px 0 8px; color: #334155; }
+  .flow { display: flex; flex-direction: column; gap: 0; margin: 14px 0; }
+  .step { display: flex; align-items: flex-start; gap: 14px; }
+  .step .num { flex: 0 0 30px; height: 30px; border-radius: 50%; background: #1565C0; color: #fff; font-weight: 700; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+  .step .body { flex: 1; padding-bottom: 18px; border-left: 2px dashed #cbd5e1; margin-left: 15px; padding-left: 18px; position: relative; margin-top: 4px; }
+  .step:last-child .body { border-left-color: transparent; padding-bottom: 4px; }
+  .step .body b { display: block; font-size: 14.5px; }
+  .step .body span { font-size: 13px; color: #64748b; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13.5px; }
+  th { background: #f8fafc; text-align: left; padding: 9px 12px; border: 1px solid #e2e8f0; color: #475569; }
+  td { padding: 9px 12px; border: 1px solid #e2e8f0; vertical-align: top; }
+  code { background: #f1f5f9; border-radius: 5px; padding: 1px 7px; font-size: 12.5px; color: #be185d; font-family: Consolas, monospace; }
+  .note { background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 13px 16px; font-size: 13px; color: #92400e; margin-top: 12px; }
+  .ok { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 13px 16px; font-size: 13px; color: #166534; margin-top: 12px; }
+  ul { padding-left: 22px; font-size: 14px; }
+  li { margin: 5px 0; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; }
+  .mini { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; font-size: 13px; }
+  .mini b { display: block; color: #1565C0; font-size: 13.5px; margin-bottom: 3px; }
+  @media (max-width: 560px){ .grid2 { grid-template-columns: 1fr; } .hero { padding: 26px 20px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hero">
+    <span class="tag">v1.17 · versionCode 18</span>
+    <h1>📬 后台自动接收新邮件 + 系统通知</h1>
+    <p>按设定频率在后台自动检查全部已录入邮箱，收到新邮件即在通知栏提醒；不用一直开着 App 手动刷新。</p>
+  </div>
+
+  <div class="card">
+    <h2>一、它是怎么工作的</h2>
+    <div class="flow">
+      <div class="step"><div class="num">1</div><div class="body"><b>系统级周期调度（JobScheduler）</b><span>默认每 15 分钟触发一次（可选 15/30/60/180 分钟）。由安卓系统统一批处理，省电且重启后自动保留；无网络时自动顺延，不空跑。</span></div></div>
+      <div class="step"><div class="num">2</div><div class="body"><b>后台静默拉取</b><span>复用与手动刷新完全相同的拉取逻辑，遍历全部账户收取最近邮件，全程在后台线程完成，不打扰前台操作。</span></div></div>
+      <div class="step"><div class="num">3</div><div class="body"><b>差集判定「新邮件」</b><span>把拉取结果与本地缓存的邮件 ID 做比对，本地没有的才算新邮件——不会把旧邮件反复通知，回收站里删掉的也不会被误判。</span></div></div>
+      <div class="step"><div class="num">4</div><div class="body"><b>发一条摘要通知</b><span>一次检查到多封新邮件只发一条通知（收件箱样式最多列 5 封），点击通知打开邮箱大师查看。AI 智能分类同步执行，与手动刷新保持一致。</span></div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>二、在哪里设置</h2>
+    <p style="font-size:14px">主界面右上角 <b>⋮ 更多菜单 → 自动接收</b>：</p>
+    <table>
+      <tr><th style="width:34%">设置项</th><th>说明</th></tr>
+      <tr><td><b>后台自动接收</b>（开关）</td><td>默认<b>开启</b>。关闭后完全停止后台联网与通知。</td></tr>
+      <tr><td><b>检查频率</b></td><td>每 15 分钟 / 30 分钟 / 每小时 / 每 3 小时，保存后立即生效。</td></tr>
+    </table>
+    <div class="note">💡 系统为省电可能将实际间隔略微放宽（安卓对周期任务的统一约束，最小粒度 15 分钟）；没有录入任何邮箱时任务不会运行。</div>
+  </div>
+
+  <div class="card">
+    <h2>三、与既有功能的协同</h2>
+    <div class="grid2">
+      <div class="mini"><b>🔒 回收站不复活</b>后台拉到的邮件如果已在回收站，不会被重新写回收件箱——回收站的删除决定始终被尊重。</div>
+      <div class="mini"><b>💾 自动落本地缓存</b>拉到新邮件即写入 SQLite 缓存，下次打开 App（包括离线）秒见。</div>
+      <div class="mini"><b>🏷️ AI 分类同步</b>后台拉取同样走 AI 智能分类（在 AI 设置里配置过的情况下），失败则自动回退本地规则分类。</div>
+      <div class="mini"><b>🔔 通知即达</b>点击通知栏消息直接回到邮件列表，新邮件就在最上面。</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>四、兼容性与权限</h2>
+    <ul>
+      <li><b>安卓 5.0 ~ 15 全覆盖</b>：通知在 Android 8+ 走通知渠道（可在系统设置里单独管理），低版本走经典通知；Android 13+ 首次使用会弹窗申请「发送通知」权限，授予后才能收到提醒。</li>
+      <li><b>重启保留</b>：任务已登记为重启后保留，杀后台、重启手机都不影响下一轮自动检查。</li>
+      <li><b>零常驻负担</b>：不使用常驻前台服务，不做任务时 App 不在后台活动。</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>五、本次验证结果</h2>
+    <div class="ok">✅ 构建通过：MailMaster-v1.17（versionCode 18，478KB），签名与历史版本一致，可直接覆盖升级。<br>
+    ✅ Manifest 校验：<code>POST_NOTIFICATIONS</code>、<code>RECEIVE_BOOT_COMPLETED</code> 权限、<code>MailCheckJobService</code>（含 BIND_JOB_SERVICE）全部就位。<br>
+    ✅ 新资源（设置对话框 / 通知图标 / 全部文案）已打进包。</div>
+  </div>
+
+</div>
+</body>
+</html>
