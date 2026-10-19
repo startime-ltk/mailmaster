@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingLeft="24dp"
+    android:paddingRight="24dp"
+    android:paddingTop="12dp"
+    android:paddingBottom="8dp">
+
+    <Switch
+        android:id="@+id/sw_enabled"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp"
+        android:text="@string/auto_receive_switch"
+        android:textSize="16sp" />
+
+    <TextView
+        android:id="@+id/tv_interval_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:text="@string/auto_receive_interval"
+        android:textSize="14sp" />
+
+    <Spinner
+        android:id="@+id/sp_interval"
+        android:layout_width="match_parent"
+        android:layout_height="42dp"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/bg_search"
+        android:paddingLeft="12dp"
+        android:paddingRight="12dp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:text="@string/auto_receive_hint"
+        android:textSize="12sp"
+        android:textColor="@color/sub" />
+
+</LinearLayout>

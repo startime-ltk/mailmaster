@@ -22,11 +22,13 @@ import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.PopupMenu;
 import android.widget.Spinner;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.app.ProgressDialog;
 import android.content.DialogInterface;
 import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.os.Build;
 import android.provider.Settings;
 import java.io.File;
@@ -110,6 +112,38 @@ public class MainActivity extends Activity {
                 return true;
             }
         });
+
+        // Android 13+ 发通知需运行时授权（不给权限则新邮件提醒不可见）
+        if (Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS},
+                    REQ_NOTIFY_PERM);
+        }
+        // 按用户设置启动/停止后台自动收邮件任务
+        AutoReceivePrefs.syncSchedule(this);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // 后台任务可能已拉回新邮件：有缓存就刷新列表（空缓存交给首次 refresh，避免空态闪跳）
+        try {
+            List<MailMessage> cached = MailCache.getInstance(this).getAll();
+            if (!cached.isEmpty()) setList(cached);
+        } catch (Exception ignored) {
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int rc, String[] perms, int[] results) {
+        super.onRequestPermissionsResult(rc, perms, results);
+        if (rc == REQ_NOTIFY_PERM) {
+            boolean granted = results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED;
+            if (!granted) {
+                Toast.makeText(this, R.string.no_notify_perm, Toast.LENGTH_LONG).show();
+            }
+        }
     }
 
     /** 长按删除确认：移入回收站（本地软删除，服务器原件不动，可在回收站恢复） */
@@ -141,6 +175,48 @@ public class MainActivity extends Activity {
             if (!name.isEmpty()) return name;
         }
         return s;
+    }
+
+    /** 自动接收设置：开关 + 检查频率（保存后立即重排后台任务） */
+    private void showAutoReceiveDialog() {
+        View v = getLayoutInflater().inflate(R.layout.dialog_auto_receive, null);
+        final Switch sw = v.findViewById(R.id.sw_enabled);
+        final Spinner sp = v.findViewById(R.id.sp_interval);
+        sw.setChecked(AutoReceivePrefs.isEnabled(this));
+        String[] labels = {
+                getString(R.string.interval_15min),
+                getString(R.string.interval_30min),
+                getString(R.string.interval_1h),
+                getString(R.string.interval_3h)};
+        ArrayAdapter<String> ad = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_item, labels);
+        ad.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        sp.setAdapter(ad);
+        long cur = AutoReceivePrefs.getInterval(this);
+        int sel = 0;
+        for (int i = 0; i < AutoReceivePrefs.INTERVALS.length; i++) {
+            if (AutoReceivePrefs.INTERVALS[i] == cur) sel = i;
+        }
+        sp.setSelection(sel);
+
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.menu_auto_receive)
+                .setView(v)
+                .setPositiveButton(R.string.btn_save, new DialogInterface.OnClickListener() {
+                    @Override public void onClick(DialogInterface d, int w) {
+                        AutoReceivePrefs.setEnabled(MainActivity.this, sw.isChecked());
+                        int pos = sp.getSelectedItemPosition();
+                        if (pos >= 0 && pos < AutoReceivePrefs.INTERVALS.length) {
+                            AutoReceivePrefs.setInterval(MainActivity.this, AutoReceivePrefs.INTERVALS[pos]);
+                        }
+                        // 开关/间隔变更后重新调度，即时生效
+                        AutoReceivePrefs.syncSchedule(MainActivity.this);
+                        Toast.makeText(MainActivity.this, R.string.auto_receive_saved,
+                                Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
     }
 
     private void bindToolbar() {
@@ -560,6 +636,7 @@ public class MainActivity extends Activity {
             startActivityForResult(new Intent(this, TrashActivity.class), REQ_TRASH);
             return true;
         }
+        if (item.getItemId() == R.id.menu_auto_receive) { showAutoReceiveDialog(); return true; }
         if (item.getItemId() == R.id.menu_ai) { showAiDialog(); return true; }
         if (item.getItemId() == R.id.menu_check_update) { checkUpdate(); return true; }
         return super.onOptionsItemSelected(item);
@@ -569,6 +646,7 @@ public class MainActivity extends Activity {
 
     private static final int REQ_INSTALL_PERM = 2003;
     private static final int REQ_TRASH = 2004;
+    private static final int REQ_NOTIFY_PERM = 3001;
     private Updater.UpdateInfo pendingUpdate;
 
     private void checkUpdate() {
@@ -697,6 +775,8 @@ public class MainActivity extends Activity {
             del.setOnClickListener(new View.OnClickListener() {
                 @Override public void onClick(View v) {
                     store.removeAccount(a.id);
+                    // 账户没了：重排后台任务（无账户时会自动停排）
+                    AutoReceivePrefs.syncSchedule(MainActivity.this);
                     if (accountDialog != null) accountDialog.dismiss();
                     curAccount = "all";
                     refresh();
@@ -869,6 +949,8 @@ public class MainActivity extends Activity {
                 store.addAccount(MainActivity.this, a);
                 curAccount = "all";
                 refresh();
+                // 新账户有了，后台任务重新排上
+                AutoReceivePrefs.syncSchedule(MainActivity.this);
                 Toast.makeText(MainActivity.this, R.string.toast_added, Toast.LENGTH_LONG).show();
             }
         });

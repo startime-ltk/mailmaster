@@ -1,13 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.mailmaster.android"
-    android:versionCode="17"
-    android:versionName="1.16">
+    android:versionCode="18"
+    android:versionName="1.17">
 
     <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34" />
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- 安卓 8+ 安装 APK 所需权限（旧系统忽略） -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- 后台自动收邮件：JobScheduler setPersisted 重启保留任务所需 -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Android 13+ 发通知的运行时权限（需 Manifest 声明 + 运行时申请双到位，缺一即静默失败） -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:label="@string/app_name"
@@ -36,6 +40,12 @@
             android:name=".TrashActivity"
             android:exported="false"
             android:label="@string/trash_title" />
+
+        <!-- 后台自动收邮件：BIND_JOB_SERVICE 权限是 JobScheduler 的硬性要求，缺失会直接调度失败 -->
+        <service
+            android:name=".MailCheckJobService"
+            android:permission="android.permission.BIND_JOB_SERVICE"
+            android:exported="false" />
 
         <!-- 附件分享：把私有目录里的附件以 content:// 临时授权给外部 App 打开 -->
         <provider

@@ -61,6 +61,18 @@
     <string name="toast_trash_cleared">回收站已清空</string>
     <string name="trash_deleted_at">删除于 %1$s</string>
     <string name="trash_item_actions">恢复：把邮件放回收件箱；彻底删除：连同本地附件一并清除，不可恢复。</string>
+
+    <!-- 自动接收 -->
+    <string name="menu_auto_receive">自动接收</string>
+    <string name="auto_receive_switch">后台自动接收新邮件</string>
+    <string name="auto_receive_interval">检查频率</string>
+    <string name="interval_15min">每 15 分钟</string>
+    <string name="interval_30min">每 30 分钟</string>
+    <string name="interval_1h">每小时</string>
+    <string name="interval_3h">每 3 小时</string>
+    <string name="auto_receive_hint">开启后按设定频率在后台自动检查新邮件，收到时发送通知。系统为省电可能将实际间隔略微放宽；关闭后不再后台联网。</string>
+    <string name="auto_receive_saved">已保存，自动接收按新设置生效</string>
+    <string name="no_notify_perm">未获得通知权限，将收不到新邮件提醒（可在系统设置中开启）</string>
     <string name="bar_title_compose">写邮件</string>
     <string name="content_back">返回</string>
     <string name="content_compose">写邮件</string>
