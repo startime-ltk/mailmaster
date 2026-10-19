@@ -16,18 +16,23 @@ import java.util.List;
  * 作用：把「已接收的邮件」持久化到本地，做到——
  *  1. 断网/弱网也能回看历史邮件（离线优先）；
  *  2. 列表秒开，不再每次等待 IMAP 全程拉取；
- *  3. 删除账户时，连同其缓存邮件与附件文件一并清理（见 {@link #deleteAccount}）。
+ *  4. 增量同步：sync_state 表记录每个账户的 UID 水位（UIDVALIDITY + min/max_uid），
+ *     拉取时只取 UID 大于水位的「新邮件」，不再每次重拉全邮箱。
  *
  * 存储约定（影响「覆盖安装 / 更新」时数据是否保留，勿随意改动）：
  *  - 数据库名固定为 "mailmaster_cache.db"，随应用私有目录存放；
  *  - 同包名、同签名覆盖安装时默认保留，卸载才会清空；
- *  - 主键采用 (account_id, msg_id)，其中 msg_id 即 MailMessage.id（形如 accountId-msgNum），全局唯一，天然去重。
+ *  - v3 起主键采用 (account_id, msg_id)，其中 msg_id 即 MailMessage.id（形如 accountId-uid），
+ *    以 IMAP UID 为锚点，全局唯一、跨会话稳定，天然去重。
+ *    v2 及以前的旧缓存用服务器序号（accountId-msgNum）作 id，序号会随新邮件到达整体位移，
+ *    升级 v3 时整体作废清空（见 onUpgrade），首次打开会重新拉取。
  */
 public class MailCache extends SQLiteOpenHelper {
 
     private static final String DB_NAME = "mailmaster_cache.db";
-    private static final int DB_VERSION = 2;
+    private static final int DB_VERSION = 3;
     private static final String TABLE = "messages";
+    private static final String TABLE_SYNC = "sync_state";
 
     // 单列引用，避免 Activity 泄漏
     private Context ctx;
@@ -64,10 +69,20 @@ public class MailCache extends SQLiteOpenHelper {
             " unread INTEGER," +
             " category TEXT," +
             " attachments TEXT," +  // Attachment 列表的 JSON 序列化
-            " msg_num INTEGER," +
+            " msg_num INTEGER," +   // 旧序号体系遗留列，v3 起不再使用（恒为 -1）
+            " uid INTEGER NOT NULL DEFAULT -1," + // IMAP UID：增量同步与已读回写的锚点
             " deleted INTEGER NOT NULL DEFAULT 0," +   // 回收站：0 正常 / 1 已删除
             " deleted_at INTEGER NOT NULL DEFAULT 0," + // 删除时间戳（回收站排序用）
             " UNIQUE(account_id, msg_id))"
+        );
+        db.execSQL(
+            "CREATE TABLE " + TABLE_SYNC + " (" +
+            " account_id TEXT PRIMARY KEY," +
+            " uid_validity INTEGER NOT NULL," + // 服务器 UIDVALIDITY：变了说明邮箱被重建，需全量重拉
+            " min_uid INTEGER NOT NULL," +     // 本地已缓存的最小 UID（向前翻页的起点）
+            " max_uid INTEGER NOT NULL," +     // 本地已缓存的最大 UID（增量拉取的起点）
+            " has_older INTEGER NOT NULL DEFAULT 1," + // 是否还有更早的邮件未拉取
+            " updated_at INTEGER NOT NULL)"
         );
     }
 
@@ -77,6 +92,136 @@ public class MailCache extends SQLiteOpenHelper {
             // v2 回收站：软删除标记与删除时间。ALTER 追加列，既有邮件数据与缓存全部保留
             db.execSQL("ALTER TABLE " + TABLE + " ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0");
             db.execSQL("ALTER TABLE " + TABLE + " ADD COLUMN deleted_at INTEGER NOT NULL DEFAULT 0");
+        }
+        if (oldV < 3) {
+            // v3 UID 体系：旧缓存以服务器序号（会位移）为 id 与主键，与新体系不兼容，
+            // 保留会造成同一封邮件以新旧两套 id 重复出现。整体作废：先删附件文件再清表，
+            // 首次打开后按 UID 重新拉取（首次窗口 100 封）。
+            Cursor c = db.query(TABLE, new String[]{"attachments"}, null, null, null, null, null);
+            try {
+                while (c.moveToNext()) deleteAttachmentFiles(c.getString(0));
+            } catch (Exception ignored) {
+            } finally {
+                if (c != null) c.close();
+            }
+            db.delete(TABLE, null, null);
+            db.execSQL("DROP TABLE IF EXISTS " + TABLE_SYNC);
+            db.execSQL(
+                "CREATE TABLE " + TABLE_SYNC + " (" +
+                " account_id TEXT PRIMARY KEY," +
+                " uid_validity INTEGER NOT NULL," +
+                " min_uid INTEGER NOT NULL," +
+                " max_uid INTEGER NOT NULL," +
+                " has_older INTEGER NOT NULL DEFAULT 1," +
+                " updated_at INTEGER NOT NULL)"
+            );
+        }
+    }
+
+    /* ------------------------- 增量同步水位（sync_state） ------------------------- */
+
+    /** 某账户的同步水位；无记录返回 null（从未拉取过） */
+    public static class SyncState {
+        public long uidValidity;
+        public long minUid;
+        public long maxUid;
+        public boolean hasOlder;
+    }
+
+    /**
+     * 写入/合并同步水位。min/max 与库中现值取并集（min 取更小、max 取更大），
+     * 保证并发或分批拉取时水位只进不退。
+     *
+     * @param hasOlder -1 保持原值 / 0 明确没有更早邮件 / 1 明确还有
+     */
+    public void saveSyncState(String accountId, long uidValidity, long uid, int hasOlder) {
+        if (accountId == null) return;
+        SQLiteDatabase db = getWritableDatabase();
+        db.beginTransaction();
+        try {
+            long min = uid, max = uid;
+            int older = (hasOlder < 0) ? 1 : hasOlder;
+            Cursor c = db.query(TABLE_SYNC,
+                    new String[]{"min_uid", "max_uid", "has_older"},
+                    "account_id=?", new String[]{accountId}, null, null, null);
+            try {
+                if (c.moveToFirst()) {
+                    long oldMin = c.getLong(0);
+                    long oldMax = c.getLong(1);
+                    if (oldMin < min) min = oldMin;
+                    if (oldMax > max) max = oldMax;
+                    if (hasOlder < 0) older = c.getInt(2);
+                }
+            } finally {
+                if (c != null) c.close();
+            }
+            android.content.ContentValues v = new android.content.ContentValues();
+            v.put("account_id", accountId);
+            v.put("uid_validity", uidValidity);
+            v.put("min_uid", min);
+            v.put("max_uid", max);
+            v.put("has_older", older);
+            v.put("updated_at", System.currentTimeMillis());
+            db.insertWithOnConflict(TABLE_SYNC, null, v, SQLiteDatabase.CONFLICT_REPLACE);
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+        }
+    }
+
+    /**
+     * 无条件重置同步水位（UIDVALIDITY 变化 / 邮箱被服务器重建时用）。
+     * 与 {@link #saveSyncState} 的合并语义不同：这里直接覆盖，
+     * 否则旧邮箱世代的 min/max 会污染新世代的水位，导致漏拉或重复拉。
+     */
+    public void resetSyncState(String accountId, long uidValidity,
+                               long minUid, long maxUid, boolean hasOlder) {
+        if (accountId == null) return;
+        SQLiteDatabase db = getWritableDatabase();
+        android.content.ContentValues v = new android.content.ContentValues();
+        v.put("account_id", accountId);
+        v.put("uid_validity", uidValidity);
+        v.put("min_uid", minUid);
+        v.put("max_uid", maxUid);
+        v.put("has_older", hasOlder ? 1 : 0);
+        v.put("updated_at", System.currentTimeMillis());
+        db.insertWithOnConflict(TABLE_SYNC, null, v, SQLiteDatabase.CONFLICT_REPLACE);
+    }
+
+    public SyncState getSyncState(String accountId) {
+        if (accountId == null) return null;
+        SQLiteDatabase db = getReadableDatabase();
+        Cursor c = null;
+        try {
+            c = db.query(TABLE_SYNC, null, "account_id=?",
+                    new String[]{accountId}, null, null, null);
+            if (c.moveToFirst()) {
+                SyncState st = new SyncState();
+                st.uidValidity = c.getLong(c.getColumnIndexOrThrow("uid_validity"));
+                st.minUid = c.getLong(c.getColumnIndexOrThrow("min_uid"));
+                st.maxUid = c.getLong(c.getColumnIndexOrThrow("max_uid"));
+                st.hasOlder = c.getInt(c.getColumnIndexOrThrow("has_older")) != 0;
+                return st;
+            }
+            return null;
+        } catch (Exception e) {
+            return null;
+        } finally {
+            if (c != null) c.close();
+        }
+    }
+
+    /** 是否还有更早的邮件可翻页加载（任一账户有即显示加载入口） */
+    public boolean hasOlderMail() {
+        SQLiteDatabase db = getReadableDatabase();
+        Cursor c = null;
+        try {
+            c = db.rawQuery("SELECT COUNT(*) FROM " + TABLE_SYNC + " WHERE has_older=1", null);
+            return c.moveToFirst() && c.getInt(0) > 0;
+        } catch (Exception e) {
+            return false;
+        } finally {
+            if (c != null) c.close();
         }
     }
 
@@ -150,23 +295,24 @@ public class MailCache extends SQLiteOpenHelper {
         return out;
     }
 
-    /** 删除某账户的全部缓存邮件，并清理其附件目录。 */
+    /** 删除某账户的全部缓存邮件，并清理其附件目录与同步水位。 */
     public void deleteAccount(String accountId) {
         if (accountId == null) return;
         SQLiteDatabase db = getWritableDatabase();
         db.delete(TABLE, "account_id=?", new String[]{accountId});
+        db.delete(TABLE_SYNC, "account_id=?", new String[]{accountId});
         // 级联清理落盘的附件文件（防止隐私残留与空间浪费）
         MailService.deleteAccountFiles(ctx, accountId);
     }
 
-    /** 已读回写时同步本地缓存的未读标记。 */
-    public void markRead(String accountId, int msgNum) {
-        if (accountId == null || msgNum <= 0) return;
+    /** 已读回写时同步本地缓存的未读标记（按 IMAP UID 定位）。 */
+    public void markRead(String accountId, long uid) {
+        if (accountId == null || uid <= 0) return;
         SQLiteDatabase db = getWritableDatabase();
         android.content.ContentValues v = new android.content.ContentValues();
         v.put("unread", 0);
-        db.update(TABLE, v, "account_id=? AND msg_num=?",
-                new String[]{accountId, String.valueOf(msgNum)});
+        db.update(TABLE, v, "account_id=? AND uid=?",
+                new String[]{accountId, String.valueOf(uid)});
     }
 
     // ---------- 回收站（软删除） ----------
@@ -283,6 +429,7 @@ public class MailCache extends SQLiteOpenHelper {
     public void clear() {
         SQLiteDatabase db = getWritableDatabase();
         db.delete(TABLE, null, null);
+        db.delete(TABLE_SYNC, null, null);
     }
 
     private android.content.ContentValues toValues(MailMessage m) {
@@ -299,7 +446,8 @@ public class MailCache extends SQLiteOpenHelper {
         v.put("unread", m.unread ? 1 : 0);
         v.put("category", m.category);
         v.put("attachments", attachmentsToJson(m.attachments));
-        v.put("msg_num", m.msgNum);
+        v.put("msg_num", -1);   // 旧序号体系作废，恒写 -1
+        v.put("uid", m.uid);
         return v;
     }
 
@@ -317,7 +465,8 @@ public class MailCache extends SQLiteOpenHelper {
         m.unread = c.getInt(c.getColumnIndexOrThrow("unread")) != 0;
         m.category = c.getString(c.getColumnIndexOrThrow("category"));
         m.attachments = jsonToAttachments(c.getString(c.getColumnIndexOrThrow("attachments")));
-        m.msgNum = c.getInt(c.getColumnIndexOrThrow("msg_num"));
+        m.msgNum = -1; // 旧序号体系作废
+        m.uid = c.getLong(c.getColumnIndexOrThrow("uid"));
         return m;
     }
 

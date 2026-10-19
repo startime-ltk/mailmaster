@@ -24,8 +24,14 @@ public class MailMessage implements Serializable {
     public long date;       // epoch 毫秒
     public boolean unread;
     public String category; // 智能分类：重要 / 推广 / 社交 / 其他
-    /** 邮件在服务器上的序号，用于回写已读状态；演示数据为 -1 */
+    /** @deprecated 旧的服务器序号，跨会话不稳定（新邮件到达会整体位移），仅历史数据保留 */
+    @Deprecated
     public int msgNum = -1;
+    /**
+     * IMAP UID（UIDFolder.getUID）：同一邮箱内严格递增、跨会话稳定，
+     * 是增量同步与已读回写的唯一可靠锚点；演示/历史数据为 -1。
+     */
+    public long uid = -1;
 
     public boolean hasAttachment() {
         return attachments != null && !attachments.isEmpty();

@@ -283,22 +283,22 @@ public class MessageActivity extends Activity {
         });
     }
 
-    /** 打开即已读：先改本地状态并同步本地缓存，真实账户再异步回写服务器 */
+    /** 打开即已读：先改本地状态并同步本地缓存，真实账户再异步回写服务器（按 UID 定位） */
     private void markRead() {
         if (!msg.unread) return;
         msg.unread = false;
         // 同步更新本地邮件缓存的未读标记，离线回看时角标才准确
         try {
-            MailCache.getInstance(MessageActivity.this).markRead(msg.accountId, msg.msgNum);
+            MailCache.getInstance(MessageActivity.this).markRead(msg.accountId, msg.uid);
         } catch (Exception ignored) {
         }
         setResult(RESULT_OK);
         final MailAccount acc = findAccount();
-        if (acc == null || acc.id.startsWith("demo-") || msg.msgNum <= 0) return;
+        if (acc == null || acc.id.startsWith("demo-") || msg.uid <= 0) return;
         new Thread(new Runnable() {
             @Override
             public void run() {
-                MailService.markRead(acc, msg.msgNum);
+                MailService.markRead(acc, msg.uid);
             }
         }).start();
     }

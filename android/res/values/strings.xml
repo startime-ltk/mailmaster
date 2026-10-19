@@ -127,4 +127,10 @@
     <string name="update_fail">检查更新失败：%1$s</string>
     <string name="download_fail">下载失败：%1$s</string>
     <string name="no_install_perm">未授予「安装未知来源应用」权限，无法更新</string>
+
+    <!-- 增量同步 / 向前翻页 -->
+    <string name="load_more_older">加载更早的邮件</string>
+    <string name="loading_older">正在加载更早的邮件…</string>
+    <string name="toast_loaded_older">已加载更早的邮件</string>
+    <string name="no_older">没有更早的邮件了</string>
 </resources>

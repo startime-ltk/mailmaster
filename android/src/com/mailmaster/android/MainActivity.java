@@ -64,6 +64,10 @@ public class MainActivity extends Activity {
     private TextView chipAll, chipImportant, chipSocial, chipOther;
     private Spinner spinnerAccount;
 
+    /** 底部「加载更早的邮件」入口（挂载后 parent 为 ListView） */
+    private View footerMore;
+    private boolean loadingOlder = false;
+
     /** 头像色板：按发件人地址哈希取色，同一个人永远同色 */
     private static final int[] AVATAR_COLORS = {
             0xFF3B82F6, 0xFF10B981, 0xFFF59E0B, 0xFFEF4444,
@@ -80,6 +84,12 @@ public class MainActivity extends Activity {
         search = findViewById(R.id.et_search);
 
         list.setEmptyView(findViewById(R.id.tv_empty));
+
+        // 底部翻页入口：有更早的邮件时才显示（见 updateFooter）
+        footerMore = getLayoutInflater().inflate(R.layout.item_load_more, list, false);
+        footerMore.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { loadOlder(); }
+        });
 
         bindToolbar();
         bindFab();
@@ -133,6 +143,7 @@ public class MainActivity extends Activity {
             if (!cached.isEmpty()) setList(cached);
         } catch (Exception ignored) {
         }
+        updateFooter();
     }
 
     @Override
@@ -298,7 +309,7 @@ public class MainActivity extends Activity {
                         @Override public void run() { setList(cached); }
                     });
                 }
-                // 2) 后台拉取最新邮件
+                // 2) 后台增量拉取新邮件（只取 UID 水位之后的新邮件，不再重拉全邮箱）
                 final List<MailMessage> real = MailService.fetchAll(MainActivity.this, store.accounts);
                 // AI 分类：子线程内调用，不阻塞 UI；失败则保留本地规则，不中断
                 try {
@@ -312,8 +323,11 @@ public class MainActivity extends Activity {
                     @Override public void run() {
                         if (!real.isEmpty()) {
                             // 落盘本地缓存，下次离线也能看
-                            MailCache.getInstance(MainActivity.this).upsertAll(real);
-                            setList(real);
+                            MailCache cache = MailCache.getInstance(MainActivity.this);
+                            cache.upsertAll(real);
+                            // 增量模式下 real 只是「新邮件」，必须回读全量缓存再上屏，
+                            // 否则列表会被替换成仅这几封，历史邮件全部消失
+                            setList(cache.getAll());
                         } else if (cached.isEmpty()) {
                             setList(new ArrayList<MailMessage>());
                             Toast.makeText(MainActivity.this, R.string.toast_fetch_empty, Toast.LENGTH_SHORT).show();
@@ -337,6 +351,68 @@ public class MainActivity extends Activity {
         }
         refreshFilterUI();
         applyFilter();
+    }
+
+    /**
+     * 底部「加载更早的邮件」入口的显隐。
+     * 有任一账户的水位标记 has_older=1 且当前未在加载时挂上 footer，否则移除——
+     * 直接 setVisibility(GONE) 在部分系统版本上仍会占一行，移除/挂载最稳。
+     */
+    private void updateFooter() {
+        if (footerMore == null) return;
+        boolean show;
+        if (loadingOlder) {
+            ((TextView) footerMore).setText(R.string.loading_older);
+            show = true;
+        } else {
+            ((TextView) footerMore).setText(R.string.load_more_older);
+            try {
+                show = MailCache.getInstance(MainActivity.this).hasOlderMail();
+            } catch (Exception e) {
+                show = false;
+            }
+        }
+        boolean attached = footerMore.getParent() != null;
+        if (show && !attached) {
+            list.addFooterView(footerMore, null, true);
+        } else if (!show && attached) {
+            list.removeFooterView(footerMore);
+        }
+    }
+
+    /** 底部翻页：按账户并发拉取更早的一批邮件，AI 分类后并入本地缓存 */
+    private void loadOlder() {
+        if (loadingOlder || store.accounts.isEmpty()) return;
+        loadingOlder = true;
+        updateFooter();
+        new Thread(new Runnable() {
+            @Override public void run() {
+                final List<MailMessage> older =
+                        MailService.fetchOlder(MainActivity.this, store.accounts, MailService.OLDER_PAGE);
+                // AI 分类：与手动刷新一致，失败则保留本地规则
+                try {
+                    AiSettings ai = AiSettings.load(MainActivity.this);
+                    if (Classifier.aiAvailable(ai)) Classifier.aiClassifyBatch(older, ai);
+                } catch (Exception ignored) {
+                }
+                runOnUiThread(new Runnable() {
+                    @Override public void run() {
+                        loadingOlder = false;
+                        if (!older.isEmpty()) {
+                            MailCache cache = MailCache.getInstance(MainActivity.this);
+                            cache.upsertAll(older);
+                            setList(cache.getAll());
+                            Toast.makeText(MainActivity.this, R.string.toast_loaded_older,
+                                    Toast.LENGTH_SHORT).show();
+                        } else {
+                            Toast.makeText(MainActivity.this, R.string.no_older,
+                                    Toast.LENGTH_SHORT).show();
+                        }
+                        updateFooter();
+                    }
+                });
+            }
+        }).start();
     }
 
     private void setEmptyText(String text) {
@@ -436,6 +512,8 @@ public class MainActivity extends Activity {
         };
         list.setAdapter(adapter);
         updateSubtitle(finalShown);
+        // 列表数据变化后同步底部翻页入口（首屏 100 封之外通常还有更早邮件）
+        updateFooter();
     }
 
     static String avatarText(String from) {
