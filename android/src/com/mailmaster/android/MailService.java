@@ -2,9 +2,12 @@ package com.mailmaster.android;
 
 import android.content.Context;
 import android.util.Log;
+import com.sun.mail.imap.IMAPStore;
 import java.io.File;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 import javax.activation.DataHandler;
@@ -50,9 +53,25 @@ public class MailService {
      * 各账户附件目录相互独立（attachments/&lt;accountId&gt;），并发无共享冲突。
      */
     public static List<MailMessage> fetchAll(Context ctx, List<MailAccount> accounts) {
-        List<MailMessage> out = new ArrayList<>();
-        if (accounts == null || accounts.isEmpty()) return out;
+        return fetchAllWithErrors(ctx, accounts).messages;
+    }
+
+    /** 拉取结果：邮件 + 每账户失败原因（供 UI 明示，而不是静默空列表） */
+    public static class FetchOutcome {
+        public final List<MailMessage> messages = new ArrayList<MailMessage>();
+        public final List<String> errors = new ArrayList<String>();
+    }
+
+    /**
+     * 拉取全部账户，并带回失败原因。
+     * 原来的 fetchAll 只把异常写 Logcat——用户看到的是“刷新完了，一封没有”，
+     * 根本不知道是授权码错、端口被封还是服务器拒绝，这一版把原因带到界面。
+     */
+    public static FetchOutcome fetchAllWithErrors(Context ctx, List<MailAccount> accounts) {
+        final FetchOutcome outcome = new FetchOutcome();
+        if (accounts == null || accounts.isEmpty()) return outcome;
         final List<MailMessage> collected = new ArrayList<>();
+        final List<String> errors = new ArrayList<>();
         final CountDownLatch latch = new CountDownLatch(accounts.size());
         for (final MailAccount a : accounts) {
             new Thread(new Runnable() {
@@ -66,6 +85,9 @@ public class MailService {
                         }
                     } catch (Exception e) {
                         Log.e("MailService", "fetch failed: " + a.email, e);
+                        synchronized (errors) {
+                            errors.add(a.email + "：" + friendlyError(e));
+                        }
                     } finally {
                         latch.countDown();
                     }
@@ -78,8 +100,40 @@ public class MailService {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
-        out.addAll(collected);
-        return out;
+        outcome.messages.addAll(collected);
+        outcome.errors.addAll(errors);
+        return outcome;
+    }
+
+    /** 把 JavaMail 的英文异常翻成能照着排查的中文（与桌面端 MailEngine.friendlyError 同文案） */
+    static String friendlyError(Exception e) {
+        String msg = e.getMessage() == null ? e.toString() : e.getMessage();
+        String low = msg.toLowerCase();
+        if (low.contains("unsafe login")) {
+            return "服务器判定为不安全登录（163/126 请在网页端重开 IMAP 并生成新授权码）";
+        }
+        if (low.contains("authenticationfailed") || low.contains("authentication failed")
+                || low.contains("invalid credentials") || low.contains("login failed")
+                || low.contains("[auth")) {
+            return "登录被拒绝：授权码错误或已过期（要填 16 位授权码，不是登录密码）";
+        }
+        if (low.contains("too many simultaneous") || low.contains("too many connections")
+                || low.contains("maximum number of connections")) {
+            return "并发连接过多：等几分钟再试（上次异常退出可能残留连接）";
+        }
+        if (low.contains("timed out") || low.contains("timeout")) {
+            return "连接超时：检查网络；校园网常封 993 端口，换手机流量试";
+        }
+        if (low.contains("unknownhost") || low.contains("unknown host")) {
+            return "域名解析失败：DNS 或网络异常";
+        }
+        if (low.contains("connection refused")) {
+            return "连接被拒绝：IMAP 端口未开放或服务器地址不对";
+        }
+        if (low.contains("certificate") || low.contains("ssl") || low.contains("handshake")) {
+            return "SSL 握手失败：检查系统时间或换网络";
+        }
+        return msg;
     }
 
     /** 附件存放目录：优先外部私有目录，不可用时回退内部目录 */
@@ -149,7 +203,27 @@ public class MailService {
         Session s = session(p, a);
         Store store = s.getStore(proto);
         store.connect();
+        sendClientId(store);
         return store;
+    }
+
+    /**
+     * RFC 2971 客户端标识。网易系（163/126/188）对未标识客户端会直接回
+     * “SELECT Unsafe Login”，表现为登录成功但打不开收件箱 → 一封也收不到。
+     * 服务器不支持 ID 时静默跳过，不影响 QQ/Outlook。
+     */
+    private static void sendClientId(Store store) {
+        try {
+            if (store instanceof IMAPStore) {
+                Map<String, String> id = new HashMap<String, String>();
+                id.put(IMAPStore.ID_NAME, "MailMaster");
+                id.put(IMAPStore.ID_VERSION, "1.22");
+                id.put(IMAPStore.ID_VENDOR, "MailMaster");
+                ((IMAPStore) store).id(id);
+            }
+        } catch (Exception ignored) {
+            // ID 非必需命令：服务商不支持就继续
+        }
     }
 
     /**
@@ -163,6 +237,20 @@ public class MailService {
      */
     private static List<MailMessage> fetchOne(Context ctx, MailAccount a) throws MessagingException {
         Store store = connectStore(a);
+        try {
+            return fetchOneOn(ctx, a, store);
+        } finally {
+            // 关键：异常路径也必须断开。漏关连接会让服务器累计到上限后拒绝所有新登录，
+            // 表现为“突然一封都收不到”，且几分钟内自愈不了。
+            try {
+                if (store.isConnected()) store.close();
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private static List<MailMessage> fetchOneOn(Context ctx, MailAccount a, Store store)
+            throws MessagingException {
         Folder inbox = store.getFolder("INBOX");
         inbox.open(Folder.READ_ONLY);
         UIDFolder uf = (UIDFolder) inbox;
@@ -204,7 +292,6 @@ public class MailService {
             MailCache.getInstance(ctx).saveSyncState(a.id, uidValidity, maxUid, -1);
         }
         inbox.close(false);
-        store.close();
         return list;
     }
 
@@ -272,8 +359,20 @@ public class MailService {
 
     private static List<MailMessage> fetchOlderOne(Context ctx, MailAccount a, int count)
             throws MessagingException {
-        List<MailMessage> list = new ArrayList<>();
         Store store = connectStore(a);
+        try {
+            return fetchOlderOn(ctx, a, count, store);
+        } finally {
+            try {
+                if (store.isConnected()) store.close();
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private static List<MailMessage> fetchOlderOn(Context ctx, MailAccount a, int count, Store store)
+            throws MessagingException {
+        List<MailMessage> list = new ArrayList<>();
         Folder inbox = store.getFolder("INBOX");
         inbox.open(Folder.READ_ONLY);
         UIDFolder uf = (UIDFolder) inbox;
@@ -282,7 +381,6 @@ public class MailService {
         // 无水位 / UIDVALIDITY 变了（该账户该先走全量重拉）/ 已到 UID 1：都没有更早的可拉
         if (st == null || st.uidValidity != uidValidity || st.minUid <= 1) {
             inbox.close(false);
-            store.close();
             return list;
         }
         long start = Math.max(1, st.minUid - count);
@@ -300,7 +398,6 @@ public class MailService {
         int hasOlder = (msgs.length >= count && minUid > 1) ? -1 : 0;
         MailCache.getInstance(ctx).saveSyncState(a.id, uidValidity, minUid, hasOlder);
         inbox.close(false);
-        store.close();
         return list;
     }
 
@@ -312,18 +409,23 @@ public class MailService {
      */
     public static MailMessage fetchByUid(Context ctx, MailAccount a, long uid) {
         if (a == null || uid <= 0) return null;
+        Store store = null;
         try {
-            Store store = connectStore(a);
+            store = connectStore(a);
             Folder inbox = store.getFolder("INBOX");
             inbox.open(Folder.READ_ONLY);
             Message m = ((UIDFolder) inbox).getMessageByUID(uid);
             MailMessage out = (m != null) ? toMailMessage(ctx, a, m, uid) : null;
             inbox.close(false);
-            store.close();
             return out;
         } catch (Exception e) {
             Log.e("MailService", "fetchByUid failed: uid=" + uid, e);
             return null;
+        } finally {
+            try {
+                if (store != null && store.isConnected()) store.close();
+            } catch (Exception ignored) {
+            }
         }
     }
 
@@ -333,8 +435,9 @@ public class MailService {
      */
     public static void markRead(MailAccount a, long uid) {
         if (a == null || uid <= 0) return;
+        Store store = null;
         try {
-            Store store = connectStore(a);
+            store = connectStore(a);
             Folder inbox = store.getFolder("INBOX");
             inbox.open(Folder.READ_WRITE);
             Message m = ((UIDFolder) inbox).getMessageByUID(uid);
@@ -342,9 +445,14 @@ public class MailService {
                 m.setFlag(Flags.Flag.SEEN, true);
             }
             inbox.close(true);
-            store.close();
         } catch (Exception e) {
             Log.e("MailService", "markRead failed", e);
+        } finally {
+            // 每点开一封就建一次连接，异常路径漏关会迅速耗尽服务端连接配额
+            try {
+                if (store != null && store.isConnected()) store.close();
+            } catch (Exception ignored) {
+            }
         }
     }
 

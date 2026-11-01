@@ -2,10 +2,13 @@ package com.mailmaster.core.service;
 
 import com.mailmaster.core.model.EmailAccount;
 import com.mailmaster.core.model.EmailMessage;
+import com.sun.mail.imap.IMAPStore;
 
 import javax.mail.*;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 
 /**
@@ -188,15 +191,44 @@ public class MailReceiver {
     }
 
     private Store connect(EmailAccount account, String password) throws Exception {
+        // STARTTLS(143) 与 SSL(993) 二选一；旧代码一律走 imaps，13x 端口账户会连不上
+        boolean startTls = account.isUseStartTls();
+        String proto = startTls ? "imap" : "imaps";
         Properties props = new Properties();
-        props.put("mail.imaps.ssl.enable", "true");
+        if (startTls) {
+            props.put("mail.imap.starttls.enable", "true");
+            props.put("mail.imap.starttls.required", "true");
+        } else {
+            props.put("mail.imaps.ssl.enable", "true");
+        }
         // 超时保护：连接 8s / 读取 15s，防弱网挂死（与安卓端一致）
-        props.put("mail.imaps.connectiontimeout", String.valueOf(CONNECT_TIMEOUT_MS));
-        props.put("mail.imaps.timeout", String.valueOf(READ_TIMEOUT_MS));
+        props.put("mail." + proto + ".connectiontimeout", String.valueOf(CONNECT_TIMEOUT_MS));
+        props.put("mail." + proto + ".timeout", String.valueOf(READ_TIMEOUT_MS));
         Session session = Session.getInstance(props, null);
-        Store store = session.getStore("imaps");
+        Store store = session.getStore(proto);
         store.connect(account.getImapHost(), account.getImapPort(), account.getUsername(), password);
+        sendClientId(store);
         return store;
+    }
+
+    /**
+     * RFC 2971 客户端标识。
+     * 网易系（163/126/188）对未标识的客户端会直接回 “SELECT Unsafe Login”，
+     * 表现为登录成功但一开收件箱就失败。发过 ID 即可正常收信；
+     * 服务器不支持 ID 时静默跳过，不影响其它服务商。
+     */
+    static void sendClientId(Store store) {
+        try {
+            if (store instanceof IMAPStore) {
+                Map<String, String> id = new HashMap<>();
+                id.put(IMAPStore.ID_NAME, "MailMaster");
+                id.put(IMAPStore.ID_VERSION, "1.22");
+                id.put(IMAPStore.ID_VENDOR, "MailMaster");
+                ((IMAPStore) store).id(id);
+            }
+        } catch (Exception ignored) {
+            // ID 不是标准必需命令：服务商不支持就继续，不阻断收信
+        }
     }
 
     private void close(Store store) {

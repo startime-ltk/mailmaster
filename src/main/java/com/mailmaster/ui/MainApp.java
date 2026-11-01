@@ -40,6 +40,7 @@ public class MainApp extends Application {
     private WebView viewer;
     private ComboBox<EmailAccount> fromBox;
     private Button olderBtn;
+    private Label syncStatus;
     private volatile boolean loadingOlder = false;
 
     @Override
@@ -72,8 +73,15 @@ public class MainApp extends Application {
         ToggleButton demoBtn = new ToggleButton("🎭 演示模式");
         demoBtn.setSelected(engine.isDemoMode());
         demoBtn.setOnAction(e -> toggleDemo(demoBtn, stage));
+        // 同步状态：正常显示时间，失败显示红字并可点开看原因（以前失败只写控制台，用户完全无感）
+        syncStatus = new Label("✓ 就绪");
+        syncStatus.setStyle("-fx-text-fill: #16a34a; -fx-font-size: 12px;");
+        syncStatus.setOnMouseClicked(e -> showSyncErrors());
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
         ToolBar tb = new ToolBar(addBtn, composeBtn, refreshBtn, new Separator(),
-                draftsBtn, trashBtn, olderBtn, new Separator(), aiBtn, new Separator(), demoBtn);
+                draftsBtn, trashBtn, olderBtn, new Separator(), aiBtn, new Separator(), demoBtn,
+                spacer, syncStatus);
 
         // 统一收件箱表格（含分类列；未读加粗由 rowFactory 处理）
         table = new TableView<>();
@@ -158,6 +166,30 @@ public class MainApp extends Application {
                     + (engine.isDemoMode() ? "  —  演示模式（示例数据，未连接真实邮箱）" : ""));
         }
         olderBtn.setDisable(engine.isDemoMode() || loadingOlder || !engine.hasOlderMail());
+        // 同步状态回显：失败不再是“静默空列表”，而是一条可点开的原因
+        if (syncStatus != null) {
+            List<String> errs = engine.getLastSyncErrors();
+            if (errs.isEmpty()) {
+                syncStatus.setText("✓ 已同步 " + java.time.LocalTime.now()
+                        .format(DateTimeFormatter.ofPattern("HH:mm")));
+                syncStatus.setStyle("-fx-text-fill: #16a34a; -fx-font-size: 12px;");
+            } else {
+                syncStatus.setText("⚠ " + errs.size() + " 个账户收信失败（点此查看）");
+                syncStatus.setStyle("-fx-text-fill: #dc2626; -fx-font-weight: bold;"
+                        + " -fx-font-size: 12px; -fx-cursor: hand;");
+            }
+        }
+    }
+
+    /** 点同步状态：逐条列出失败原因 */
+    private void showSyncErrors() {
+        List<String> errs = engine.getLastSyncErrors();
+        if (errs.isEmpty()) return;
+        alert("收信失败原因：\n\n" + String.join("\n", errs)
+                + "\n\n按顺序排查：\n1) 网页版邮箱 → 设置 → 开启 IMAP/SMTP 服务；\n"
+                + "2) 重新生成 16 位授权码（不是登录密码）；\n"
+                + "3) 换手机流量再试（校园网常封 993 端口）；\n"
+                + "4) 用官方邮箱 App 验证账号本身能否收信。");
     }
 
     private void showMessage(EmailMessage m) {
@@ -187,11 +219,20 @@ public class MainApp extends Application {
     /* ------------------------- 异步动作 ------------------------- */
 
     private void refreshAsync(Stage owner) {
+        if (syncStatus != null) {
+            syncStatus.setText("⟳ 同步中…");
+            syncStatus.setStyle("-fx-text-fill: #64748b; -fx-font-size: 12px;");
+        }
         new Thread(() -> {
             try {
                 engine.refresh();
             } catch (Exception ex) {
                 Platform.runLater(() -> alert("刷新失败: " + ex.getMessage()));
+                return;
+            }
+            List<String> errs = engine.getLastSyncErrors();
+            if (!errs.isEmpty()) {
+                Platform.runLater(() -> showSyncErrors());
             }
         }).start();
     }

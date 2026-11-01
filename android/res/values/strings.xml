@@ -35,6 +35,8 @@
     <string name="toast_refreshing">正在收取…</string>
     <string name="toast_fetch_empty">未收取到邮件，请检查授权码或网络</string>
     <string name="toast_offline_cache">网络暂不可用，已显示本地缓存邮件</string>
+    <string name="fetch_failed_title">收信失败</string>
+    <string name="fetch_failed_tips">排查顺序：\n1) 网页版邮箱 → 设置 → 开启 IMAP/SMTP 服务\n2) 重新生成 16 位授权码（不是登录密码）\n3) 换手机流量再试（校园网常封 993 端口）\n4) 用官方邮箱 App 验证账号本身能否收信</string>
     <string name="loading">正在收取邮件…</string>
     <string name="unread_hint">未读</string>
     <string name="bar_title_message">邮件详情</string>

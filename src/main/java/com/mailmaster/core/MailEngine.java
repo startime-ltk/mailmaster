@@ -53,6 +53,9 @@ public class MailEngine {
     /** AI 分类设置（变更后立即生效，落盘 ~/.mailmaster/ai.properties） */
     private AiSettings aiSettings;
 
+    /** 本轮同步中失败账户的原因（给 UI 诊断用；成功后清空） */
+    private final List<String> lastSyncErrors = Collections.synchronizedList(new ArrayList<>());
+
     public MailEngine(String dbPath) {
         this.store = new AccountStore(dbPath);
         this.msgStore = new MessageStore(dbPath);
@@ -165,17 +168,62 @@ public class MailEngine {
      */
     public synchronized void refresh() throws Exception {
         if (demoMode) {
+            lastSyncErrors.clear();
             notifyUpdate();
             return;
         }
+        lastSyncErrors.clear();
         for (EmailAccount a : store.loadAll()) {
             try {
                 syncAccount(a);
             } catch (Exception e) {
+                // 单账户失败不影响其他账户；但必须留下“人话版”原因给 UI，否则用户只看到空列表
+                lastSyncErrors.add(a.getEmail() + "：" + friendlyError(e));
                 System.err.println("拉取失败 " + a.getEmail() + ": " + e.getMessage());
             }
         }
         notifyUpdate();
+    }
+
+    /** 最近一次同步的失败原因（空列表 = 全部成功） */
+    public List<String> getLastSyncErrors() {
+        synchronized (lastSyncErrors) {
+            return new ArrayList<>(lastSyncErrors);
+        }
+    }
+
+    /**
+     * 把 JavaMail 的英文异常翻译成用户能照着排查的中文。
+     * 这是「收不到邮件却不知道为什么」的第一道止血：症状一眼可辨，原因直接说破。
+     */
+    static String friendlyError(Exception e) {
+        String msg = e.getMessage() == null ? e.toString() : e.getMessage();
+        String low = msg.toLowerCase();
+        if (low.contains("unsafe login")) {
+            return "服务器判定为不安全登录（网易 163/126 邮箱请在网页端重新开启 IMAP 并生成新授权码）";
+        }
+        if (low.contains("authenticationfailed") || low.contains("authentication failed")
+                || low.contains("invalid credentials") || low.contains("login failed")
+                || low.contains("[auth")) {
+            return "登录被拒绝：授权码错误或已过期（密码栏要填 16 位授权码，不是邮箱登录密码）";
+        }
+        if (low.contains("too many simultaneous") || low.contains("too many connections")
+                || low.contains("maximum number of connections")) {
+            return "并发连接过多：等几分钟再试（上次异常退出可能残留连接）";
+        }
+        if (low.contains("timed out") || low.contains("timeout")) {
+            return "连接超时：检查网络；校园网/公司网常封 993 端口，可切手机流量再试";
+        }
+        if (low.contains("unknownhost") || low.contains("unknown host")) {
+            return "域名解析失败：DNS 或网络异常";
+        }
+        if (low.contains("connection refused")) {
+            return "连接被拒绝：IMAP 端口未开放或服务器地址不正确";
+        }
+        if (low.contains("certificate") || low.contains("ssl") || low.contains("handshake")) {
+            return "SSL 握手失败：系统时间不对或网络中间人拦截（换网络再试）";
+        }
+        return msg;
     }
 
     /** 单账户增量同步（三模式：首次窗口 / UIDVALIDITY 变化重拉 / 日常增量） */

@@ -96,13 +96,22 @@ public class WebServer {
             // ---------- 状态 ----------
             if ("/api/status".equals(path) && "GET".equals(method)) {
                 long unread = engine.getInbox().stream().filter(m -> !m.isRead()).count();
-                sendJson(ex, 200, Map.of(
-                        "demoMode", engine.isDemoMode(),
-                        "hasRealAccounts", engine.hasRealAccounts(),
-                        "unread", unread,
-                        "trashCount", engine.countTrash(),
-                        "draftCount", engine.countDrafts(),
-                        "hasOlder", engine.hasOlderMail()));
+                Map<String, Object> st = new LinkedHashMap<>();
+                st.put("demoMode", engine.isDemoMode());
+                st.put("hasRealAccounts", engine.hasRealAccounts());
+                st.put("unread", unread);
+                st.put("trashCount", engine.countTrash());
+                st.put("draftCount", engine.countDrafts());
+                st.put("hasOlder", engine.hasOlderMail());
+                // 收信失败原因（空数组=正常）：网页端也要能看见，而不是“刷新了但没邮件”
+                st.put("errors", engine.getLastSyncErrors());
+                sendJson(ex, 200, st);
+                return;
+            }
+            // ---------- 手动刷新（网页版“⟳”要真的联网收信，而不是只重读本地库） ----------
+            if ("/api/refresh".equals(path) && "POST".equals(method)) {
+                engine.refresh();
+                sendJson(ex, 200, Map.of("ok", true, "errors", engine.getLastSyncErrors()));
                 return;
             }
             // ---------- 账户 ----------

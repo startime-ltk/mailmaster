@@ -16,8 +16,21 @@ import java.util.Base64;
  */
 public class AesUtil {
     private static final String ALGO = "AES/CBC/PKCS5Padding";
-    // 固定 IV（演示用；生产可随机生成并随密文一起存储）
-    private static final byte[] IV = "MailMasterInitVec".getBytes(StandardCharsets.UTF_8);
+    /**
+     * 固定 IV，必须严格 16 字节（AES 分组长度）。
+     * 旧值 "MailMasterInitVec" 是 17 字节，IvParameterSpec 构造即抛
+     * “Wrong IV length: must be 16 bytes long”，导致桌面端添加账户/解密全线失败。
+     * 因旧值从未成功加密过（每次都在 init 阶段抛异常），改为 16 字节不存在历史密文兼容问题。
+     */
+    private static final byte[] IV = iv16("MailMasterInit16");
+
+    /** 把任意长度字符串裁/补成严格 16 字节，杜绝 IvParameterSpec 长度异常 */
+    private static byte[] iv16(String s) {
+        byte[] out = new byte[16];
+        byte[] raw = s.getBytes(StandardCharsets.UTF_8);
+        System.arraycopy(raw, 0, out, 0, Math.min(raw.length, 16));
+        return out;
+    }
 
     private static SecretKeySpec keySpec() {
         String raw = System.getenv("MAILMASTER_AES_KEY");

@@ -345,7 +345,10 @@ public class MainActivity extends Activity {
                     });
                 }
                 // 2) 后台增量拉取新邮件（只取 UID 水位之后的新邮件，不再重拉全邮箱）
-                final List<MailMessage> real = MailService.fetchAll(MainActivity.this, store.accounts);
+                //    同时带回每账户失败原因：以前只写 Logcat，用户只看到“没邮件”，无从排查
+                final MailService.FetchOutcome outcome =
+                        MailService.fetchAllWithErrors(MainActivity.this, store.accounts);
+                final List<MailMessage> real = outcome.messages;
                 // AI 分类：子线程内调用，不阻塞 UI；失败则保留本地规则，不中断
                 try {
                     AiSettings ai = AiSettings.load(MainActivity.this);
@@ -363,17 +366,35 @@ public class MainActivity extends Activity {
                             // 增量模式下 real 只是「新邮件」，必须回读全量缓存再上屏，
                             // 否则列表会被替换成仅这几封，历史邮件全部消失
                             setList(cache.getAll());
-                        } else if (cached.isEmpty()) {
+                        } else if (cached.isEmpty() && outcome.errors.isEmpty()) {
                             setList(new ArrayList<MailMessage>());
                             Toast.makeText(MainActivity.this, R.string.toast_fetch_empty, Toast.LENGTH_SHORT).show();
-                        } else {
+                        } else if (!cached.isEmpty()) {
                             // 网络拉取为空（断网/无新邮件）但本地有缓存：保留缓存显示
                             Toast.makeText(MainActivity.this, R.string.toast_offline_cache, Toast.LENGTH_SHORT).show();
+                        }
+                        // 有失败账户：弹窗把真实原因说清楚（比“没收到邮件”有用得多）
+                        if (!outcome.errors.isEmpty()) {
+                            showFetchErrors(outcome.errors);
                         }
                     }
                 });
             }
         }).start();
+    }
+
+    /** 收信失败原因弹窗：账户 + 人话版原因 + 排查步骤 */
+    private void showFetchErrors(List<String> errors) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < errors.size(); i++) {
+            if (i > 0) sb.append("\n");
+            sb.append("• ").append(errors.get(i));
+        }
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.fetch_failed_title)
+                .setMessage(sb.toString() + "\n\n" + getString(R.string.fetch_failed_tips))
+                .setPositiveButton(android.R.string.ok, null)
+                .show();
     }
 
     /** 保存全量邮件并套用当前筛选条件 */

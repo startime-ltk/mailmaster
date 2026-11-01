@@ -1,7 +1,7 @@
 const $ = (s) => document.querySelector(s);
 let state = {
   demoMode: false, accounts: [], messages: [],
-  hasOlder: false, draftCount: 0, trashCount: 0, unread: 0,
+  hasOlder: false, draftCount: 0, trashCount: 0, unread: 0, errors: [],
   currentMsgId: null, currentDraftId: 0, loadingOlder: false
 };
 
@@ -65,6 +65,7 @@ async function loadAll() {
     state.trashCount = status.trashCount || 0;
     state.draftCount = status.draftCount || 0;
     state.hasOlder = status.hasOlder || false;
+    state.errors = status.errors || [];
     render();
   } catch (e) {
     toast('加载失败: ' + e.message);
@@ -73,6 +74,14 @@ async function loadAll() {
 
 function render() {
   $('#demoBadge').hidden = !state.demoMode;
+  const errBox = $('#syncError');
+  if (state.errors && state.errors.length) {
+    errBox.hidden = false;
+    errBox.innerHTML = '<b>⚠ 收信失败</b><br>' + state.errors.map(escapeHtml).join('<br>')
+      + '<br><span class="dim">点此关闭 · 排查：网页端开启 IMAP → 重生成授权码 → 换手机流量试</span>';
+  } else {
+    errBox.hidden = true;
+  }
   const ub = $('#unreadBadge');
   if (state.unread > 0) { ub.hidden = false; ub.textContent = state.unread + ' 未读'; }
   else ub.hidden = true;
@@ -181,7 +190,18 @@ document.querySelectorAll('.modal').forEach(m => m.addEventListener('click', e =
   if (e.target === m) { if (m.id === 'composeModal') autoSaveDraft(); hideModal(m); }
 }));
 
-$('#refreshBtn').addEventListener('click', loadAll);
+$('#refreshBtn').addEventListener('click', async () => {
+  const btn = $('#refreshBtn');
+  btn.disabled = true;
+  try {
+    // 真正联网收信（服务端轮询是 60s 一次，手动点必须立即拉）
+    await api('/api/refresh', { method: 'POST', body: '{}' });
+  } catch (e) {
+    toast('刷新失败: ' + e.message);
+  }
+  btn.disabled = false;
+  await loadAll();
+});
 $('#olderBtn').addEventListener('click', async () => {
   if (state.loadingOlder) return;
   state.loadingOlder = true;
@@ -437,5 +457,7 @@ $('#aiSaveBtn').addEventListener('click', async () => {
     toast('AI 设置已保存 ✅');
   } catch (e) { toast('失败: ' + e.message); }
 });
+
+$('#syncError').addEventListener('click', () => { $('#syncError').hidden = true; });
 
 loadAll();
