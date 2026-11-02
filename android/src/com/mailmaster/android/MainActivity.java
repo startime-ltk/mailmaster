@@ -1196,34 +1196,61 @@ public class MainActivity extends Activity {
 
         lay.addView(sp); lay.addView(email); lay.addView(pw); lay.addView(customBox);
         b.setView(lay);
+        b.setNegativeButton("取消", null);
+        b.setPositiveButton(R.string.btn_save, null);
 
-        b.setPositiveButton(R.string.btn_save, new android.content.DialogInterface.OnClickListener() {
-            @Override public void onClick(android.content.DialogInterface d, int w) {
-                String p = provs[sp.getSelectedItemPosition()];
-                String em = email.getText().toString().trim();
-                String pass = pw.getText().toString().trim();
-                MailAccount a;
-                if ("CUSTOM".equals(p)) {
-                    String ih = etImapH.getText().toString().trim();
-                    String sh = etSmtpH.getText().toString().trim();
-                    boolean tls = chkTls.isChecked();
-                    int ip = parsePort(etImapP.getText().toString(), tls ? 143 : 993);
-                    int sp2 = parsePort(etSmtpP.getText().toString(), tls ? 587 : 465);
-                    a = MailAccount.presetCustom(em, pass, ih, ip, sh, sp2, tls);
-                    a.name = etName.getText().toString().trim();
-                } else {
-                    a = MailAccount.preset(p, em, pass);
-                }
-                store.addAccount(MainActivity.this, a);
-                curAccount = "all";
-                refresh();
-                // 新账户有了，后台任务重新排上
-                AutoReceivePrefs.syncSchedule(MainActivity.this);
-                Toast.makeText(MainActivity.this, R.string.toast_added, Toast.LENGTH_LONG).show();
+        final AlertDialog dlg = b.create();
+        dlg.setOnShowListener(new DialogInterface.OnShowListener() {
+            @Override public void onShow(DialogInterface d) {
+                dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(new View.OnClickListener() {
+                    @Override public void onClick(View v) {
+                        String p = provs[sp.getSelectedItemPosition()];
+                        String em = email.getText().toString().trim();
+                        String pass = pw.getText().toString().trim();
+                        // 以前这里完全不校验：邮箱和授权码都空着也能「保存成功」，
+                        // 列表里多出一个永远收不到信的假账户，用户还以为是网络问题。
+                        if (em.isEmpty() || !em.contains("@") || em.startsWith("@") || em.endsWith("@")) {
+                            Toast.makeText(MainActivity.this, R.string.err_email_invalid, Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                        if (pass.isEmpty()) {
+                            Toast.makeText(MainActivity.this, R.string.err_auth_empty, Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                        if ("CUSTOM".equals(p) && etImapH.getText().toString().trim().isEmpty()) {
+                            Toast.makeText(MainActivity.this, R.string.err_imap_empty, Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                        for (MailAccount ex : store.accounts) {
+                            if (em.equalsIgnoreCase(ex.email)) {
+                                Toast.makeText(MainActivity.this, R.string.err_account_exists, Toast.LENGTH_SHORT).show();
+                                return;
+                            }
+                        }
+                        MailAccount a;
+                        if ("CUSTOM".equals(p)) {
+                            String ih = etImapH.getText().toString().trim();
+                            String sh = etSmtpH.getText().toString().trim();
+                            boolean tls = chkTls.isChecked();
+                            int ip = parsePort(etImapP.getText().toString(), tls ? 143 : 993);
+                            int sp2 = parsePort(etSmtpP.getText().toString(), tls ? 587 : 465);
+                            a = MailAccount.presetCustom(em, pass, ih, ip, sh, sp2, tls);
+                            a.name = etName.getText().toString().trim();
+                        } else {
+                            a = MailAccount.preset(p, em, pass);
+                        }
+                        store.addAccount(MainActivity.this, a);
+                        curAccount = "all";
+                        dlg.dismiss();
+                        refresh();
+                        // 新账户有了，后台任务重新排上
+                        AutoReceivePrefs.syncSchedule(MainActivity.this);
+                        Toast.makeText(MainActivity.this, R.string.toast_added, Toast.LENGTH_LONG).show();
+                    }
+                });
             }
         });
-        b.setNegativeButton("取消", null);
-        b.show();
+        dlg.show();
     }
 
     private int parsePort(String s, int fallback) {

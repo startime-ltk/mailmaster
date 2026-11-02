@@ -40,6 +40,10 @@
     <string name="no_account_title">还没有添加邮箱账户</string>
     <string name="no_account_msg">邮箱列表是空的，所以点刷新不会有任何反应，也收不到邮件。\n\n先添加一个账户：填邮箱地址 + 网页版生成的 16 位授权码（不是登录密码）。</string>
     <string name="menu_diagnostics">诊断信息（收不到邮件点这里）</string>
+    <string name="err_email_invalid">请填写完整的邮箱地址，例如 name@qq.com</string>
+    <string name="err_auth_empty">请填写 16 位授权码（不是邮箱登录密码，网页版设置里生成）</string>
+    <string name="err_imap_empty">自定义邮箱需要填写 IMAP 服务器地址</string>
+    <string name="err_account_exists">这个邮箱已经添加过了</string>
     <string name="diag_title">诊断信息</string>
     <string name="diag_test">测试连接</string>
     <string name="diag_copy">复制</string>
