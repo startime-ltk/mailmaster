@@ -660,9 +660,10 @@ public class MainActivity extends Activity {
         List<MailMessage> shown = new ArrayList<>();
         for (int i = 0; i < all.size(); i++) {
             MailMessage m = all.get(i);
-            // 1) 模式：收件箱隐藏推广，拦截视图只显推广
+            // 1) 模式：收件箱显示全部，推广只打标签不隐藏——
+            //    隐藏的代价太大：邮件其实收到了，用户看到的却是空列表。
+            //    「疑似骚扰拦截」视图仍然只看推广，作为筛选器保留。
             boolean isPromo = Classifier.PROMO.equals(m.category);
-            if (curMode.equals("inbox") && isPromo) continue;
             if (curMode.equals("block") && !isPromo) continue;
             // 2) 账户
             if (!curAccount.equals("all") && !curAccount.equals(m.accountId)) continue;
