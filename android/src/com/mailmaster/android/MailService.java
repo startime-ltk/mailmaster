@@ -36,7 +36,9 @@ import javax.mail.internet.MimeUtility;
 public class MailService {
 
     /** 首次同步 / UIDVALIDITY 变化时的全量窗口：只拉最近 100 封，避免首次打开卡死 */
-    private static final int FIRST_WINDOW = 100;
+    // 首次/全量重拉的窗口。取 30 而不是 100：单次 FETCH 的信封更少、响应更小，
+    // 弱网下既快又稳；更早的邮件用底部「加载更早」按需翻页补齐。
+    private static final int FIRST_WINDOW = 30;
     /** 向前翻页（「加载更早的邮件」）每批封数 */
     public static final int OLDER_PAGE = 30;
 
@@ -85,7 +87,9 @@ public class MailService {
                                 collected.addAll(part);
                             }
                         }
-                    } catch (Exception e) {
+                    } catch (Throwable e) {
+                        // 必须 catch Throwable：子线程里跑出的 Error（OOM/类缺失等）
+                        // 抓不到就会直接杀进程，表现为「点刷新就闪退」且看不到任何原因
                         Log.e("MailService", "fetch failed: " + a.email, e);
                         synchronized (errors) {
                             errors.add(a.email + "：" + friendlyError(e));
@@ -113,9 +117,12 @@ public class MailService {
     }
 
     /** 把 JavaMail 的英文异常翻成能照着排查的中文（与桌面端 MailEngine.friendlyError 同文案） */
-    static String friendlyError(Exception e) {
+    static String friendlyError(Throwable e) {
         String msg = e.getMessage() == null ? e.toString() : e.getMessage();
         String low = msg.toLowerCase();
+        // Error 类不是异常，但同样会让进程崩掉，必须翻译成人话
+        if (e instanceof OutOfMemoryError) return "设备内存不足：已减少单次拉取数量，请重试";
+        if (e instanceof StackOverflowError) return "邮件结构异常（递归过深），该封已跳过";
         if (low.contains("unsafe login")) {
             return "服务器判定为不安全登录（163/126 请在网页端重开 IMAP 并生成新授权码）";
         }

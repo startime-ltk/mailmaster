@@ -89,6 +89,7 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle b) {
         super.onCreate(b);
         setContentView(R.layout.activity_main);
+        installCrashHandler();
         store.init(this);
         subtitle = findViewById(R.id.tv_subtitle);
         list = findViewById(R.id.list);
@@ -146,6 +147,84 @@ public class MainActivity extends Activity {
         }
         // 按用户设置启动/停止后台自动收邮件任务
         AutoReceivePrefs.syncSchedule(this);
+        // 上次崩过就把原因摆在脸上：闪退现场拿不到 logcat，只能让 App 自己记
+        showCrashIfAny();
+    }
+
+    /**
+     * 崩溃捕获：把未捕获异常写进 crash.log。
+     * 手机端没有 logcat，一旦闪退只能靠猜。写盘后下次启动直接弹窗显示并可复制，
+     * 用户把这段发过来就能精确定位，不用再一轮轮试。
+     */
+    private void installCrashHandler() {
+        final Thread.UncaughtExceptionHandler sys = Thread.getDefaultUncaughtExceptionHandler();
+        Thread.setDefaultUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
+            @Override public void uncaughtException(Thread t, Throwable e) {
+                try {
+                    java.io.File f = new java.io.File(getFilesDir(), "crash.log");
+                    java.io.PrintWriter pw = new java.io.PrintWriter(new java.io.FileWriter(f, false));
+                    pw.println("版本 1.29  线程 " + t.getName()
+                            + "  时间 " + new SimpleDateFormat("MM-dd HH:mm:ss", Locale.CHINA).format(new Date()));
+                    e.printStackTrace(pw);
+                    pw.close();
+                } catch (Exception ignored) {
+                }
+                if (sys != null) sys.uncaughtException(t, e);
+            }
+        });
+    }
+
+    /** 读取 crash.log 内容（截断到 3000 字符），没有则返回空串 */
+    private String readCrashLog() {
+        try {
+            java.io.File f = new java.io.File(getFilesDir(), "crash.log");
+            if (!f.exists()) return "";
+            java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+            java.io.FileInputStream in = new java.io.FileInputStream(f);
+            byte[] buf = new byte[4096];
+            int n;
+            while ((n = in.read(buf)) > 0) bo.write(buf, 0, n);
+            in.close();
+            String txt = bo.toString("UTF-8");
+            return (txt.length() > 3000) ? txt.substring(0, 3000) + "\n…（已截断）" : txt;
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /** 启动时若存在崩溃记录，弹窗显示原因并提供复制/清空 */
+    private void showCrashIfAny() {
+        final String crash = readCrashLog();
+        if (crash.length() == 0) return;
+        TextView tv = new TextView(this);
+        tv.setTextIsSelectable(true);
+        tv.setText(crash);
+        tv.setTextSize(11);
+        tv.setPadding(24, 16, 24, 16);
+        ScrollView sv = new ScrollView(this);
+        sv.addView(tv);
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.crash_title)
+                .setView(sv)
+                .setPositiveButton(R.string.diag_copy, new DialogInterface.OnClickListener() {
+                    @Override public void onClick(DialogInterface d, int w) {
+                        ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                        if (cm != null) {
+                            cm.setPrimaryClip(ClipData.newPlainText("MailMaster 崩溃", crash));
+                            Toast.makeText(MainActivity.this, R.string.diag_copied, Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                })
+                .setNegativeButton(R.string.crash_clear, new DialogInterface.OnClickListener() {
+                    @Override public void onClick(DialogInterface d, int w) {
+                        try {
+                            new java.io.File(getFilesDir(), "crash.log").delete();
+                        } catch (Exception ignored) {
+                        }
+                    }
+                })
+                .setNeutralButton(R.string.diag_close, null)
+                .show();
     }
 
     /** 通知点击直达（SINGLE_TOP 复用实例时走这里） */
@@ -499,6 +578,11 @@ public class MainActivity extends Activity {
         }
         sb.append("\n本地缓存：").append(cache.getAll().size()).append(" 封\n");
         sb.append("刷新状态：").append(refreshing ? "正在刷新…（等 30 秒再复制）" : lastFetchSummary).append("\n");
+        // 崩溃栈一并带上：诊断面板本来就是排查入口，闪退原因必须在同一处看得到
+        String crash = readCrashLog();
+        if (crash.length() > 0) {
+            sb.append("\n—— 上次崩溃 ——\n").append(crash).append("\n");
+        }
 
         final TextView tv = new TextView(this);
         tv.setText(sb.toString());
@@ -577,6 +661,7 @@ public class MainActivity extends Activity {
      */
     private void updateFooter() {
         if (footerMore == null) return;
+        try {
         boolean show;
         if (loadingOlder) {
             ((TextView) footerMore).setText(R.string.loading_older);
@@ -594,6 +679,10 @@ public class MainActivity extends Activity {
             list.addFooterView(footerMore, null, true);
         } else if (!show && attached) {
             list.removeFooterView(footerMore);
+        }
+        } catch (Throwable t) {
+            // 底部入口挂不上不能拖垮整个列表（各系统版本对 addFooterView 时序要求不一）
+            android.util.Log.w("MainActivity", "updateFooter", t);
         }
     }
 
@@ -728,10 +817,13 @@ public class MainActivity extends Activity {
                 return cv;
             }
         };
+        // 底部翻页入口必须在 setAdapter 之前挂载：ListView 一旦设置过普通 adapter，
+        // 再调 addFooterView 会抛 IllegalStateException("Cannot add header view to list
+        // -- setAdapter has already been called")。之前邮件一直是 0 封、has_older 为假
+        // 所以从没触发；邮件一拉到就崩，表现正是「点刷新就闪退」。
+        updateFooter();
         list.setAdapter(adapter);
         updateSubtitle(finalShown);
-        // 列表数据变化后同步底部翻页入口（首屏 100 封之外通常还有更早邮件）
-        updateFooter();
     }
 
     static String avatarText(String from) {
