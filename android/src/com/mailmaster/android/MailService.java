@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import javax.activation.DataHandler;
 import javax.activation.FileDataSource;
 import javax.mail.Address;
@@ -95,8 +96,13 @@ public class MailService {
             }).start();
         }
         try {
-            // 单账户已有 8s/15s 超时兜底，这里不会无限期等待
-            latch.await();
+            // 总超时 45s：即使底层卡死，也必须给用户一个明确结果，
+            // 否则界面既不报错也不弹窗，看起来就是「点了刷新没反应」。
+            if (!latch.await(45, TimeUnit.SECONDS)) {
+                synchronized (errors) {
+                    errors.add("部分账户 45 秒内未返回（网络可能被拦截）：换手机流量再试");
+                }
+            }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -134,6 +140,31 @@ public class MailService {
             return "SSL 握手失败：检查系统时间或换网络";
         }
         return msg;
+    }
+
+    /**
+     * 连接测试（诊断面板用）：真正建一次 IMAP 连接并打开收件箱。
+     * 这是唯一能一次性区分「网络不通 / 授权码错 / 服务器风控 / 其实正常」的手段。
+     */
+    public static String testConnection(Context ctx, MailAccount a) {
+        if (a == null) return "无账户";
+        Store store = null;
+        Folder inbox = null;
+        long t0 = System.currentTimeMillis();
+        try {
+            store = connectStore(a);
+            inbox = store.getFolder("INBOX");
+            inbox.open(Folder.READ_ONLY);
+            int n = inbox.getMessageCount();
+            long ms = System.currentTimeMillis() - t0;
+            return "✅ 连接成功：收件箱 " + n + " 封，耗时 " + ms + "ms";
+        } catch (Exception e) {
+            Log.e("MailService", "testConnection failed: " + a.email, e);
+            return "❌ " + friendlyError(e);
+        } finally {
+            try { if (inbox != null && inbox.isOpen()) inbox.close(false); } catch (Exception ignored) {}
+            try { if (store != null && store.isConnected()) store.close(); } catch (Exception ignored) {}
+        }
     }
 
     /** 附件存放目录：优先外部私有目录，不可用时回退内部目录 */
@@ -349,7 +380,8 @@ public class MailService {
             }).start();
         }
         try {
-            latch.await();
+            // 与 fetchAllWithErrors 一致：总超时兜底，防止无限期挂住
+            latch.await(45, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }

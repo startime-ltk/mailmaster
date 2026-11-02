@@ -43,24 +43,34 @@ public class MailStore {
             JSONArray arr = new JSONArray(raw);
             List<MailAccount> loaded = new ArrayList<>();
             for (int i = 0; i < arr.length(); i++) {
-                JSONObject o = arr.getJSONObject(i);
-                MailAccount a = new MailAccount();
-                a.id = o.getString("id");
-                a.provider = o.getString("provider");
-                a.email = o.getString("email");
-                a.displayName = o.optString("displayName", "");
-                a.name = o.optString("nm", "");
-                a.password = Crypto.decrypt(o.getString("pw"));
-                a.imapHost = o.getString("ih");
-                a.imapPort = o.getInt("ip");
-                a.smtpHost = o.getString("sh");
-                a.smtpPort = o.getInt("sp");
-                a.useStartTls = o.getBoolean("tls");
-                loaded.add(a);
+                // 逐条容错：以前只要有一条记录坏掉（解密失败/字段缺失/旧版本格式），
+                // 整个 accounts 就被清空，界面上表现为「账户凭空消失、点刷新毫无反应」。
+                // 现在跳过坏记录、保留其余账户，坏了几条也不至于全丢。
+                try {
+                    JSONObject o = arr.getJSONObject(i);
+                    MailAccount a = new MailAccount();
+                    a.id = o.getString("id");
+                    a.provider = o.optString("provider", "CUSTOM");
+                    a.email = o.optString("email", "");
+                    a.displayName = o.optString("displayName", "");
+                    a.name = o.optString("nm", "");
+                    a.password = Crypto.decrypt(o.optString("pw", ""));
+                    a.imapHost = o.optString("ih", "");
+                    a.imapPort = o.optInt("ip", 993);
+                    a.smtpHost = o.optString("sh", "");
+                    a.smtpPort = o.optInt("sp", 465);
+                    a.useStartTls = o.optBoolean("tls", false);
+                    if (a.id.isEmpty() || a.email.isEmpty()) {
+                        throw new IllegalStateException("id/email 缺失");
+                    }
+                    loaded.add(a);
+                } catch (Exception bad) {
+                    android.util.Log.w("MailStore", "跳过损坏的账户记录 #" + i, bad);
+                }
             }
             accounts = loaded;
         } catch (Exception e) {
-            // 解析失败也不回退到演示数据，避免静默混入示例内容
+            // 整体 JSON 都坏了才走到这里（极少见）
             accounts = new ArrayList<>();
         }
     }

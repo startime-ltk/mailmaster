@@ -37,6 +37,14 @@
     <string name="toast_offline_cache">网络暂不可用，已显示本地缓存邮件</string>
     <string name="fetch_failed_title">收信失败</string>
     <string name="fetch_failed_tips">排查顺序：\n1) 网页版邮箱 → 设置 → 开启 IMAP/SMTP 服务\n2) 重新生成 16 位授权码（不是登录密码）\n3) 换手机流量再试（校园网常封 993 端口）\n4) 用官方邮箱 App 验证账号本身能否收信</string>
+    <string name="no_account_title">还没有添加邮箱账户</string>
+    <string name="no_account_msg">邮箱列表是空的，所以点刷新不会有任何反应，也收不到邮件。\n\n先添加一个账户：填邮箱地址 + 网页版生成的 16 位授权码（不是登录密码）。</string>
+    <string name="menu_diagnostics">诊断信息（收不到邮件点这里）</string>
+    <string name="diag_title">诊断信息</string>
+    <string name="diag_test">测试连接</string>
+    <string name="diag_copy">复制</string>
+    <string name="diag_copied">已复制，直接粘贴发给我即可</string>
+    <string name="diag_close">关闭</string>
     <string name="loading">正在收取邮件…</string>
     <string name="unread_hint">未读</string>
     <string name="bar_title_message">邮件详情</string>

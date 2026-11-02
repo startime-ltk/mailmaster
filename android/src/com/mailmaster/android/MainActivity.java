@@ -26,8 +26,12 @@ import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.app.ProgressDialog;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.content.pm.PackageInfo;
+import android.widget.ScrollView;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.provider.Settings;
@@ -67,6 +71,11 @@ public class MainActivity extends Activity {
     /** 底部「加载更早的邮件」入口（挂载后 parent 为 ListView） */
     private View footerMore;
     private boolean loadingOlder = false;
+
+    /** 最近一次刷新的结果摘要，供「诊断信息」读取——出问题时不用再靠猜 */
+    private static String lastFetchSummary = "本次启动尚未刷新";
+    /** 首次启动的“还没有账户”引导只弹一次，避免每次进 App 都打扰 */
+    private boolean guideShown = false;
 
     /** 头像色板：按发件人地址哈希取色，同一个人永远同色 */
     private static final int[] AVATAR_COLORS = {
@@ -266,7 +275,7 @@ public class MainActivity extends Activity {
             }
         });
         findViewById(R.id.btn_refresh).setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { refresh(); }
+            @Override public void onClick(View v) { refresh(true); }
         });
         findViewById(R.id.btn_more).setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
@@ -327,9 +336,34 @@ public class MainActivity extends Activity {
     }
 
     private void refresh() {
+        refresh(false);
+    }
+
+    /**
+     * @param fromUser 用户主动触发（点刷新/下拉）。主动触发时即使之前点过「稍后」也要再提示一次，
+     *                 否则用户会以为「点了没反应 = 收不到邮件」。
+     */
+    private void refresh(boolean fromUser) {
         if (store.accounts.isEmpty()) {
+            // 以前这里直接 return：用户点刷新毫无反应，还以为“收不到邮件”。
+            // 账户没加进来是收不到信最常见的原因，必须明确说出来并给出入口。
             setEmptyText(getString(R.string.empty_no_account));
             setList(new ArrayList<MailMessage>());
+            lastFetchSummary = "账户列表为空，未发起网络请求";
+            if (fromUser || !guideShown) {
+                guideShown = true;
+                new AlertDialog.Builder(this)
+                        .setTitle(R.string.no_account_title)
+                        .setMessage(R.string.no_account_msg)
+                        .setPositiveButton(R.string.menu_add_account,
+                                new DialogInterface.OnClickListener() {
+                                    @Override public void onClick(DialogInterface d, int w) {
+                                        showAddDialog();
+                                    }
+                                })
+                        .setNegativeButton("稍后", null)
+                        .show();
+            }
             return;
         }
         buildAccountSpinner(); // 账户可能变动，重建下拉并保留当前选择
@@ -359,6 +393,10 @@ public class MainActivity extends Activity {
                 }
                 runOnUiThread(new Runnable() {
                     @Override public void run() {
+                        lastFetchSummary = new SimpleDateFormat("MM-dd HH:mm:ss", Locale.getDefault())
+                                .format(new Date())
+                                + " 拉到 " + real.size() + " 封"
+                                + (outcome.errors.isEmpty() ? "，无错误" : "，失败 " + outcome.errors.size() + " 个账户");
                         if (!real.isEmpty()) {
                             // 落盘本地缓存，下次离线也能看
                             MailCache cache = MailCache.getInstance(MainActivity.this);
@@ -395,6 +433,96 @@ public class MainActivity extends Activity {
                 .setMessage(sb.toString() + "\n\n" + getString(R.string.fetch_failed_tips))
                 .setPositiveButton(android.R.string.ok, null)
                 .show();
+    }
+
+    /** 诊断信息：把「为什么收不到」需要的事实一次性摊开，可一键复制发人 */
+    private void showDiagnostics() {
+        final MailCache cache = MailCache.getInstance(this);
+        final StringBuilder sb = new StringBuilder();
+        String ver = "?";
+        long vcode = -1;
+        try {
+            PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
+            ver = pi.versionName;
+            vcode = Build.VERSION.SDK_INT >= 28 ? pi.getLongVersionCode() : pi.versionCode;
+        } catch (Exception ignored) {
+        }
+        sb.append("版本：").append(ver).append(" (").append(vcode).append(")\n");
+        sb.append("系统：Android ").append(Build.VERSION.RELEASE)
+                .append(" / SDK ").append(Build.VERSION.SDK_INT).append("\n");
+        sb.append("账户数：").append(store.accounts.size()).append("\n");
+        for (MailAccount a : store.accounts) {
+            sb.append("\n▸ ").append(a.email).append("\n");
+            sb.append("  类型：").append(a.provider).append("  ")
+                    .append(a.imapHost).append(":").append(a.imapPort)
+                    .append(a.useStartTls ? " (STARTTLS)" : " (SSL)").append("\n");
+            sb.append("  授权码：").append(a.password == null ? 0 : a.password.length()).append(" 位\n");
+            MailCache.SyncState st = cache.getSyncState(a.id);
+            if (st == null) {
+                sb.append("  同步水位：无（从未成功拉取过）\n");
+            } else {
+                sb.append("  水位：UIDVALIDITY=").append(st.uidValidity)
+                        .append(" / min=").append(st.minUid)
+                        .append(" / max=").append(st.maxUid)
+                        .append(" / 更早=").append(st.hasOlder ? "有" : "无").append("\n");
+            }
+        }
+        sb.append("\n本地缓存：").append(cache.getAll().size()).append(" 封\n");
+        sb.append("上次刷新：").append(lastFetchSummary).append("\n");
+
+        final TextView tv = new TextView(this);
+        tv.setText(sb.toString());
+        tv.setTextSize(13);
+        tv.setTextIsSelectable(true);
+        int pad = (int) (16 * getResources().getDisplayMetrics().density);
+        tv.setPadding(pad, pad, pad, pad);
+
+        ScrollView sv = new ScrollView(this);
+        sv.addView(tv);
+
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.diag_title)
+                .setView(sv)
+                .setPositiveButton(R.string.diag_test, new DialogInterface.OnClickListener() {
+                    @Override public void onClick(DialogInterface d, int w) {
+                        runConnectionTest(tv, sb.toString());
+                    }
+                })
+                .setNeutralButton(R.string.diag_copy, new DialogInterface.OnClickListener() {
+                    @Override public void onClick(DialogInterface d, int w) {
+                        ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                        if (cm != null) {
+                            cm.setPrimaryClip(ClipData.newPlainText("MailMaster 诊断", tv.getText().toString()));
+                            Toast.makeText(MainActivity.this, R.string.diag_copied, Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                })
+                .setNegativeButton(R.string.diag_close, null)
+                .show();
+    }
+
+    /** 真正建一次连接：能立刻分辨「网络不通 / 授权码错 / 服务器风控 / 其实是好的」 */
+    private void runConnectionTest(final TextView tv, final String base) {
+        final List<MailAccount> accs = new ArrayList<>(store.accounts);
+        if (accs.isEmpty()) {
+            tv.setText(base + "\n\n（没有账户可测，先添加账户）");
+            return;
+        }
+        tv.setText(base + "\n\n正在测试连接，最长约 30 秒…");
+        new Thread(new Runnable() {
+            @Override public void run() {
+                final StringBuilder r = new StringBuilder(base).append("\n\n—— 连接测试 ——");
+                for (MailAccount a : accs) {
+                    r.append("\n\n▸ ").append(a.email).append("\n  ")
+                            .append(MailService.testConnection(MainActivity.this, a));
+                }
+                runOnUiThread(new Runnable() {
+                    @Override public void run() {
+                        tv.setText(r.toString());
+                    }
+                });
+            }
+        }).start();
     }
 
     /** 保存全量邮件并套用当前筛选条件 */
@@ -764,7 +892,7 @@ public class MainActivity extends Activity {
             return true;
         }
         if (item.getItemId() == R.id.menu_add) { showAddDialog(); return true; }
-        if (item.getItemId() == R.id.menu_refresh) { refresh(); return true; }
+        if (item.getItemId() == R.id.menu_refresh) { refresh(true); return true; }
         if (item.getItemId() == R.id.menu_accounts) { showAccountsDialog(); return true; }
         if (item.getItemId() == R.id.menu_trash) {
             startActivityForResult(new Intent(this, TrashActivity.class), REQ_TRASH);
@@ -776,6 +904,7 @@ public class MainActivity extends Activity {
         }
         if (item.getItemId() == R.id.menu_auto_receive) { showAutoReceiveDialog(); return true; }
         if (item.getItemId() == R.id.menu_ai) { showAiDialog(); return true; }
+        if (item.getItemId() == R.id.menu_diagnostics) { showDiagnostics(); return true; }
         if (item.getItemId() == R.id.menu_check_update) { checkUpdate(); return true; }
         return super.onOptionsItemSelected(item);
     }
