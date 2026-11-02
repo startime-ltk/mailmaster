@@ -74,6 +74,8 @@ public class MainActivity extends Activity {
 
     /** 最近一次刷新的结果摘要，供「诊断信息」读取——出问题时不用再靠猜 */
     private static String lastFetchSummary = "本次启动尚未刷新";
+    /** 是否正在联网刷新（诊断面板据此提示“等一会再看”） */
+    private static volatile boolean refreshing = false;
     /** 首次启动的“还没有账户”引导只弹一次，避免每次进 App 都打扰 */
     private boolean guideShown = false;
 
@@ -369,8 +371,10 @@ public class MainActivity extends Activity {
         buildAccountSpinner(); // 账户可能变动，重建下拉并保留当前选择
         setEmptyText(getString(R.string.toast_fetch_empty));
         Toast.makeText(this, R.string.toast_refreshing, Toast.LENGTH_SHORT).show();
+        refreshing = true;
         new Thread(new Runnable() {
             @Override             public void run() {
+              try {
                 // 1) 先读本地缓存即时展示（离线可用、列表秒开）
                 final List<MailMessage> cached = MailCache.getInstance(MainActivity.this).getAll();
                 if (!cached.isEmpty()) {
@@ -393,6 +397,7 @@ public class MainActivity extends Activity {
                 }
                 runOnUiThread(new Runnable() {
                     @Override public void run() {
+                        refreshing = false;
                         lastFetchSummary = new SimpleDateFormat("MM-dd HH:mm:ss", Locale.getDefault())
                                 .format(new Date())
                                 + " 拉到 " + real.size() + " 封"
@@ -427,6 +432,21 @@ public class MainActivity extends Activity {
                         }
                     }
                 });
+              } catch (Throwable t) {
+                // 刷新线程里任何未预料的异常都不能静默吞掉：
+                // 否则用户看到的就是「点了刷新，什么也没发生」。
+                android.util.Log.e("MainActivity", "refresh crashed", t);
+                final String m = (t.getMessage() == null) ? t.toString() : t.getMessage();
+                runOnUiThread(new Runnable() {
+                    @Override public void run() {
+                        refreshing = false;
+                        lastFetchSummary = "刷新异常：" + m;
+                        showFetchErrors(java.util.Collections.singletonList("刷新过程异常：" + m));
+                    }
+                });
+              } finally {
+                refreshing = false;
+              }
             }
         }).start();
     }
@@ -478,7 +498,7 @@ public class MainActivity extends Activity {
             }
         }
         sb.append("\n本地缓存：").append(cache.getAll().size()).append(" 封\n");
-        sb.append("上次刷新：").append(lastFetchSummary).append("\n");
+        sb.append("刷新状态：").append(refreshing ? "正在刷新…（等 30 秒再复制）" : lastFetchSummary).append("\n");
 
         final TextView tv = new TextView(this);
         tv.setText(sb.toString());
@@ -490,7 +510,7 @@ public class MainActivity extends Activity {
         ScrollView sv = new ScrollView(this);
         sv.addView(tv);
 
-        new AlertDialog.Builder(this)
+        AlertDialog diagDlg = new AlertDialog.Builder(this)
                 .setTitle(R.string.diag_title)
                 .setView(sv)
                 .setPositiveButton(R.string.diag_test, new DialogInterface.OnClickListener() {
@@ -508,7 +528,10 @@ public class MainActivity extends Activity {
                     }
                 })
                 .setNegativeButton(R.string.diag_close, null)
-                .show();
+                .create();
+        diagDlg.show();
+        // 打开即自动测一轮：用户不用再找按钮，直接看结果、点复制
+        runConnectionTest(tv, sb.toString());
     }
 
     /** 真正建一次连接：能立刻分辨「网络不通 / 授权码错 / 服务器风控 / 其实是好的」 */
