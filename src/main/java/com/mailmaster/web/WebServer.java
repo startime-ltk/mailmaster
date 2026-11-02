@@ -184,6 +184,11 @@ public class WebServer {
                 EmailMessage found = engine.getInbox().stream()
                         .filter(m -> m.getId().equals(id)).findFirst().orElse(null);
                 if (found == null) { sendJson(ex, 404, Map.of("error", "not found")); return; }
+                // 列表只缓存信封，详情按需补正文（单封往返，通常 1-2 秒）
+                if (!found.hasContent() && !engine.isDemoMode() && found.getUid() > 0) {
+                    EmailMessage fresh = engine.retryBody(id);
+                    if (fresh != null && fresh.hasContent()) found = fresh;
+                }
                 sendJson(ex, 200, msgDto(found));
                 return;
             }

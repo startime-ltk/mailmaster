@@ -197,18 +197,40 @@ public class MainApp extends Application {
             viewer.getEngine().loadContent("<p style='color:#888'>未选择邮件</p>");
             return;
         }
-        String html = m.getBodyHtml() != null
-                ? m.getBodyHtml()
-                : "<pre style='white-space:pre-wrap;font-family:sans-serif'>" + escape(m.getBodyText()) + "</pre>";
-        // 正文为空给出明确提示（与安卓端一致，不显示一片空白）
-        if ((m.getBodyHtml() == null || m.getBodyHtml().trim().isEmpty())
-                && (m.getBodyText() == null || m.getBodyText().trim().isEmpty())) {
-            html = "<p style='color:#888'>这封邮件的正文没能取到（格式特殊或网络中断）。" +
-                   "可关闭后重试，或在手机上用「重新加载正文」单封重拉。</p>";
+        // 列表只缓存信封（标题/发件人/时间），正文在这里按需补拉：
+        // 批量拉 100 封时逐封抓正文会有 100 次网络往返，必然拖到超时，一封都存不下来。
+        if (!m.hasContent()) {
+            viewer.getEngine().loadContent("<p style='color:#888'>正在加载正文…</p>");
+            if (!engine.isDemoMode() && m.getUid() > 0) {
+                new Thread(() -> {
+                    EmailMessage fresh = engine.retryBody(m.getId());
+                    Platform.runLater(() -> {
+                        if (fresh != null && fresh.hasContent()) {
+                            viewer.getEngine().loadContent(renderHtml(fresh), "text/html");
+                            if (!fresh.isRead()) engine.markRead(fresh.getId());
+                        } else {
+                            viewer.getEngine().loadContent(EMPTY_BODY_HTML);
+                        }
+                    });
+                }).start();
+            } else {
+                viewer.getEngine().loadContent(EMPTY_BODY_HTML);
+            }
+        } else {
+            viewer.getEngine().loadContent(renderHtml(m), "text/html");
         }
-        viewer.getEngine().loadContent(html, "text/html");
         // 打开即已读：本地缓存 + 异步回写服务器
         if (!m.isRead()) engine.markRead(m.getId());
+    }
+
+    private static final String EMPTY_BODY_HTML =
+            "<p style='color:#888'>这封邮件的正文暂时没能取到（格式特殊或网络中断）。" +
+            "可以重新点一次这封邮件再试。</p>";
+
+    /** 正文渲染：有 HTML 用 HTML，否则纯文本包 pre 保持换行 */
+    private String renderHtml(EmailMessage m) {
+        if (m.getBodyHtml() != null && !m.getBodyHtml().trim().isEmpty()) return m.getBodyHtml();
+        return "<pre style='white-space:pre-wrap;font-family:sans-serif'>" + escape(m.getBodyText()) + "</pre>";
     }
 
     private static String escape(String s) {

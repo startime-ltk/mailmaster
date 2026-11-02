@@ -91,6 +91,25 @@ public class MessageActivity extends Activity {
         bindDelete();
         bindRetryBody();
         markRead();
+        // 列表阶段只缓存信封（标题/发件人/时间），正文打开这封时按需补拉
+        autoLoadBodyIfNeeded();
+    }
+
+    private boolean autoLoadingBody = false;
+
+    /**
+     * 打开详情时自动补拉正文。
+     * 列表批量拉取为了速度只存信封，正文留到这里单封取——
+     * 用户无感，比「先等 100 封正文全下载完再显示列表」快得多。
+     * 失败时退回手动「重新加载正文」按钮。
+     */
+    private void autoLoadBodyIfNeeded() {
+        boolean empty = (msg.body == null || msg.body.trim().length() == 0)
+                && (msg.html == null || msg.html.trim().length() == 0);
+        if (!empty || msg.uid <= 0 || findAccount() == null) return;
+        autoLoadingBody = true;
+        renderBody();   // 先显示「正在加载正文…」
+        retryBody();
     }
 
     /** 「重新加载正文」按钮：仅真实账户（uid>0）且有意义时可见，点击按 UID 单封重拉 */
@@ -127,6 +146,7 @@ public class MessageActivity extends Activity {
                 final MailMessage fresh = MailService.fetchByUid(MessageActivity.this, acc, msg.uid);
                 runOnUiThread(new Runnable() {
                     @Override public void run() {
+                        autoLoadingBody = false;
                         btn.setEnabled(true);
                         btn.setText(R.string.btn_retry_body);
                         boolean hasContent = fresh != null
@@ -145,6 +165,8 @@ public class MessageActivity extends Activity {
                             Toast.makeText(MessageActivity.this, R.string.retry_body_ok,
                                     Toast.LENGTH_SHORT).show();
                         } else {
+                            // 自动补拉失败：退回「正文暂不可用 + 重新加载」入口，不让人对着空白页
+                            renderBody();
                             Toast.makeText(MessageActivity.this, R.string.retry_body_fail,
                                     Toast.LENGTH_LONG).show();
                         }
@@ -308,12 +330,11 @@ public class MessageActivity extends Activity {
             sv.setVisibility(View.VISIBLE);
             bodyTv.setText(msg.body);
         } else {
-            // HTML 与纯文本都为空：加密/签名邮件或格式特殊，给出明确提示而非一片空白，
-            // 同时亮出「重新加载正文」单封重试入口（仅真实账户可见）
+            // HTML 与纯文本都为空：可能是正文还没拉（自动补拉中），也可能是加密/签名邮件
             wv.setVisibility(View.GONE);
             sv.setVisibility(View.VISIBLE);
-            bodyTv.setText(R.string.msg_body_unavailable);
-            showRetryButton(true);
+            bodyTv.setText(autoLoadingBody ? R.string.msg_body_loading : R.string.msg_body_unavailable);
+            showRetryButton(!autoLoadingBody);
         }
     }
 

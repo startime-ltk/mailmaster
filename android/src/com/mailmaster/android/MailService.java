@@ -14,6 +14,7 @@ import java.util.concurrent.TimeUnit;
 import javax.activation.DataHandler;
 import javax.activation.FileDataSource;
 import javax.mail.Address;
+import javax.mail.FetchProfile;
 import javax.mail.Flags;
 import javax.mail.Folder;
 import javax.mail.Message;
@@ -301,38 +302,79 @@ public class MailService {
             int total = inbox.getMessageCount();
             int start = Math.max(1, total - FIRST_WINDOW + 1);
             if (total > 0) {
-                for (Message mm : inbox.getMessages(start, total)) picked.add(mm);
+                Message[] all = inbox.getMessages(start, total);
+                // 关键：信封批量预取，1 次往返拿到 100 封的标题/发件人/时间/已读/UID。
+                // 正文绝不在这里逐封抓——100 封就是 100 次网络往返，手机上必然超过
+                // 45 秒总超时，最终返回空列表：连接成功 222 封、本地缓存却是 0 封。
+                prefetchEnvelope(inbox, all);
+                for (Message mm : all) picked.add(mm);
             }
             hasOlder = total > FIRST_WINDOW;
         } else {
             // 增量：UID 严格递增，只取水位之后的新邮件（空数组表示无新邮件）
-            for (Message mm : uf.getMessagesByUID(st.maxUid + 1, UIDFolder.LASTUID)) {
-                picked.add(mm);
-            }
+            Message[] newer = uf.getMessagesByUID(st.maxUid + 1, UIDFolder.LASTUID);
+            prefetchEnvelope(inbox, newer);
+            for (Message mm : newer) picked.add(mm);
             hasOlder = st.hasOlder;
         }
 
         List<MailMessage> list = new ArrayList<>();
         long minUid = 0, maxUid = 0;
         for (Message mm : picked) {
-            long u = uf.getUID(mm);
-            if (minUid == 0 || u < minUid) minUid = u;
-            if (u > maxUid) maxUid = u;
-            list.add(toMailMessage(ctx, a, mm, u));
+            try {
+                long u = uf.getUID(mm);
+                if (u <= 0) continue;
+                if (minUid == 0 || u < minUid) minUid = u;
+                if (u > maxUid) maxUid = u;
+                // 只存信封：正文打开详情页时再按 UID 单封补拉
+                list.add(toMailMessage(ctx, a, mm, u, false));
+            } catch (Exception e) {
+                // 单封畸形（编码异常/结构损坏）跳过，不能因为一封坏邮件让整个账户 0 封
+                Log.w("MailService", "skip bad message: " + e.getMessage());
+            }
         }
 
         // 水位维护：全量重拉直接重置；增量仅在有新邮件时前移 max_uid（无新邮件则不动）
         if (fullResync) {
-            MailCache.getInstance(ctx).resetSyncState(a.id, uidValidity, minUid, maxUid, hasOlder);
-        } else if (!picked.isEmpty()) {
+            // 拉到了却一封都没解析成功：不推进水位，下次继续重试
+            if (!(list.isEmpty() && !picked.isEmpty())) {
+                MailCache.getInstance(ctx).resetSyncState(a.id, uidValidity, minUid, maxUid, hasOlder);
+            }
+        } else if (!list.isEmpty()) {
             MailCache.getInstance(ctx).saveSyncState(a.id, uidValidity, maxUid, -1);
         }
         inbox.close(false);
         return list;
     }
 
-    /** 把一封 javax.mail.Message 转成 MailMessage（UID 由调用方传入，避免重复查询） */
-    private static MailMessage toMailMessage(Context ctx, MailAccount a, Message mm, long uid)
+    /**
+     * 批量预取信封信息（ENVELOPE / FLAGS / UID）。
+     * 把「N 封邮件各发一次 FETCH」压成 1 次往返，这是手机端能在一秒内展示
+     * 一百封邮件的关键；正文仍按需单封拉取。
+     */
+    private static void prefetchEnvelope(Folder inbox, Message[] msgs) {
+        if (msgs == null || msgs.length == 0) return;
+        try {
+            FetchProfile fp = new FetchProfile();
+            fp.add(FetchProfile.Item.ENVELOPE);
+            fp.add(FetchProfile.Item.FLAGS);
+            fp.add(UIDFolder.FetchProfileItem.UID);
+            inbox.fetch(msgs, fp);
+        } catch (Exception e) {
+            // 预取失败不致命：后续读取会退化成逐封请求，只是慢一点
+            Log.w("MailService", "prefetch envelope failed: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 把一封 javax.mail.Message 转成 MailMessage（UID 由调用方传入，避免重复查询）。
+     *
+     * @param withBody true = 同时抓正文/HTML/附件（详情页单封补拉用）；
+     *                 false = 只取信封（列表批量拉取用），正文留空，打开详情再补。
+     *                 批量拉 100 封时若逐封抓正文，就是 100 次网络往返，手机上会被
+     *                 总超时切断，一封都存不下来。
+     */
+    private static MailMessage toMailMessage(Context ctx, MailAccount a, Message mm, long uid, boolean withBody)
             throws MessagingException {
         MailMessage x = new MailMessage();
         x.id = a.id + "-" + uid;
@@ -344,12 +386,15 @@ public class MailService {
         x.to = a.email;
         // 主题/发件人做 encoded-word 解码；正文递归解析 multipart 并按 charset 解码（GBK 兜底）
         x.subject = MailParser.decodeHeader(mm.getSubject());
-        if (x.subject.isEmpty()) x.subject = "(无主题)";
-        x.body = MailParser.extractBody(mm);
-        // 保留 HTML 原文，详情页可用 WebView 按原排版渲染
-        x.html = MailParser.extractHtml(mm);
-        // 附件落盘后才进入列表，详情页点开即可用其他应用打开
-        x.attachments = MailParser.extractAttachments(mm, attachDir(ctx, a.id));
+        if (x.subject == null || x.subject.isEmpty()) x.subject = "(无主题)";
+        if (withBody) {
+            x.body = MailParser.extractBody(mm);
+            // 保留 HTML 原文，详情页可用 WebView 按原排版渲染
+            x.html = MailParser.extractHtml(mm);
+            // 附件落盘后才进入列表，详情页点开即可用其他应用打开
+            x.attachments = MailParser.extractAttachments(mm, attachDir(ctx, a.id));
+        }
+        // 分类只用发件人+主题也够准（推广/通知类关键词都在标题里），避免为了分类去抓正文
         x.category = Classifier.classify(x.from, x.subject, x.body);
         x.date = (mm.getSentDate() != null) ? mm.getSentDate().getTime() : System.currentTimeMillis();
         try {
@@ -423,11 +468,17 @@ public class MailService {
         long start = Math.max(1, st.minUid - count);
         long end = st.minUid - 1;
         Message[] msgs = uf.getMessagesByUID(start, end);
+        prefetchEnvelope(inbox, msgs);
         long minUid = st.minUid;
         for (Message mm : msgs) {
-            long u = uf.getUID(mm);
-            if (u < minUid) minUid = u;
-            list.add(toMailMessage(ctx, a, mm, u));
+            try {
+                long u = uf.getUID(mm);
+                if (u <= 0) continue;
+                if (u < minUid) minUid = u;
+                list.add(toMailMessage(ctx, a, mm, u, false));
+            } catch (Exception e) {
+                Log.w("MailService", "skip bad older message: " + e.getMessage());
+            }
         }
         // 拉满一页且没到 UID 1 → 可能还有更早（保持 has_older）；不足一页、一封没有、
         // 或已到 UID 1（最早一封）→ 到底。注意「恰好拉满又正好到 1」也必须收敛，
@@ -452,7 +503,8 @@ public class MailService {
             Folder inbox = store.getFolder("INBOX");
             inbox.open(Folder.READ_ONLY);
             Message m = ((UIDFolder) inbox).getMessageByUID(uid);
-            MailMessage out = (m != null) ? toMailMessage(ctx, a, m, uid) : null;
+            // 详情页补拉：这里必须带正文与附件
+            MailMessage out = (m != null) ? toMailMessage(ctx, a, m, uid, true) : null;
             inbox.close(false);
             return out;
         } catch (Exception e) {

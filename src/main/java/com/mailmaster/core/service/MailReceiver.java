@@ -54,9 +54,9 @@ public class MailReceiver {
             int total = inbox.getMessageCount();
             int start = Math.max(0, total - limit);
             if (total > 0) {
-                for (Message m : inbox.getMessages(start + 1, total)) {
-                    addMessage(r, account, m, uf);
-                }
+                Message[] all = inbox.getMessages(start + 1, total);
+                prefetchEnvelope(inbox, all);
+                for (Message m : all) addMessage(r, account, m, uf, false);
             }
             r.hasOlder = total > limit;
             return r;
@@ -80,9 +80,9 @@ public class MailReceiver {
             UIDFolder uf = (UIDFolder) inbox;
             FetchResult r = new FetchResult();
             r.uidValidity = uf.getUIDValidity();
-            for (Message m : uf.getMessagesByUID(fromUid, toUid)) {
-                addMessage(r, account, m, uf);
-            }
+            Message[] range = uf.getMessagesByUID(fromUid, toUid);
+            prefetchEnvelope(inbox, range);
+            for (Message m : range) addMessage(r, account, m, uf, false);
             return r;
         } finally {
             close(store);
@@ -97,7 +97,7 @@ public class MailReceiver {
             inbox.open(Folder.READ_ONLY);
             UIDFolder uf = (UIDFolder) inbox;
             Message m = uf.getMessageByUID(uid);
-            return m == null ? null : parse(account, m, uid);
+            return m == null ? null : parse(account, m, uid, true);
         } finally {
             close(store);
         }
@@ -119,15 +119,37 @@ public class MailReceiver {
     }
 
     /** 拉取结果里追加一封，并维护 min/max 水位 */
-    private void addMessage(FetchResult r, EmailAccount account, Message m, UIDFolder uf)
-            throws Exception {
-        long uid = uf.getUID(m);
-        if (r.minUid == 0 || uid < r.minUid) r.minUid = uid;
-        if (uid > r.maxUid) r.maxUid = uid;
-        r.messages.add(parse(account, m, uid));
+    private void addMessage(FetchResult r, EmailAccount account, Message m, UIDFolder uf, boolean withBody) {
+        try {
+            long uid = uf.getUID(m);
+            if (uid <= 0) return;
+            if (r.minUid == 0 || uid < r.minUid) r.minUid = uid;
+            if (uid > r.maxUid) r.maxUid = uid;
+            r.messages.add(parse(account, m, uid, withBody));
+        } catch (Exception e) {
+            // 单封畸形跳过，不能因为一封坏邮件让整个账户 0 封
+            System.err.println("skip bad message: " + e.getMessage());
+        }
     }
 
-    private EmailMessage parse(EmailAccount account, Message m, long uid) throws Exception {
+    /**
+     * 批量预取信封（ENVELOPE/FLAGS/UID）：N 封邮件的往返压成 1 次。
+     * 与安卓端 prefetchEnvelope 对应，是首屏能秒开一百封的关键。
+     */
+    private void prefetchEnvelope(Folder inbox, Message[] msgs) {
+        if (msgs == null || msgs.length == 0) return;
+        try {
+            FetchProfile fp = new FetchProfile();
+            fp.add(FetchProfile.Item.ENVELOPE);
+            fp.add(FetchProfile.Item.FLAGS);
+            fp.add(UIDFolder.FetchProfileItem.UID);
+            inbox.fetch(msgs, fp);
+        } catch (Exception e) {
+            System.err.println("prefetch envelope failed: " + e.getMessage());
+        }
+    }
+
+    private EmailMessage parse(EmailAccount account, Message m, long uid, boolean withBody) throws Exception {
         EmailMessage em = new EmailMessage();
         em.setAccountId(account.getId());
         em.setAccountEmail(account.getEmail());
@@ -140,7 +162,8 @@ public class MailReceiver {
         em.setSubject(m.getSubject() == null ? "" : decode(m.getSubject()));
         em.setSentDate(m.getSentDate());
         em.setRead(m.getFlags().contains(Flags.Flag.SEEN));
-        parseBody(m, em);
+        // 列表只取信封；正文在详情页按 UID 单封补拉（批量逐封抓正文会让 100 封拉取超时）
+        if (withBody) parseBody(m, em);
         return em;
     }
 
