@@ -96,7 +96,12 @@ public class MailCache extends SQLiteOpenHelper {
         if (oldV < 3) {
             // v3 UID 体系：旧缓存以服务器序号（会位移）为 id 与主键，与新体系不兼容，
             // 保留会造成同一封邮件以新旧两套 id 重复出现。整体作废：先删附件文件再清表，
-            // 首次打开后按 UID 重新拉取（首次窗口 100 封）。
+            // 首次打开后按 UID 重新拉取。
+            // 注意：以前这里漏了补 uid 列，只清了数据——老设备升级后表仍是 v2 结构，
+            // 一写入就崩 "table messages has no column named uid"。
+            if (!hasColumn(db, TABLE, "uid")) {
+                db.execSQL("ALTER TABLE " + TABLE + " ADD COLUMN uid INTEGER NOT NULL DEFAULT -1");
+            }
             Cursor c = db.query(TABLE, new String[]{"attachments"}, null, null, null, null, null);
             try {
                 while (c.moveToNext()) deleteAttachmentFiles(c.getString(0));
@@ -116,6 +121,57 @@ public class MailCache extends SQLiteOpenHelper {
                 " updated_at INTEGER NOT NULL)"
             );
         }
+    }
+
+    /**
+     * 列级自愈：不管这个库是历史上哪个版本留下来的，缺哪列补哪列。
+     *
+     * 教训：v3 的 onUpgrade 漏了给 messages 加 uid 列，而迁移逻辑只有升版本号时
+     * 才跑一次——已经升到 v3 的坏库就再也没机会修，表现是「一点刷新就崩」。
+     * 这里放在 onOpen（每次打开数据库都执行），任何历史遗留状态都能自愈。
+     */
+    @Override
+    public void onOpen(SQLiteDatabase db) {
+        super.onOpen(db);
+        try {
+            if (!hasColumn(db, TABLE, "uid")) {
+                db.execSQL("ALTER TABLE " + TABLE + " ADD COLUMN uid INTEGER NOT NULL DEFAULT -1");
+            }
+            if (!hasColumn(db, TABLE, "deleted")) {
+                db.execSQL("ALTER TABLE " + TABLE + " ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0");
+            }
+            if (!hasColumn(db, TABLE, "deleted_at")) {
+                db.execSQL("ALTER TABLE " + TABLE + " ADD COLUMN deleted_at INTEGER NOT NULL DEFAULT 0");
+            }
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS " + TABLE_SYNC + " (" +
+                " account_id TEXT PRIMARY KEY," +
+                " uid_validity INTEGER NOT NULL," +
+                " min_uid INTEGER NOT NULL," +
+                " max_uid INTEGER NOT NULL," +
+                " has_older INTEGER NOT NULL DEFAULT 1," +
+                " updated_at INTEGER NOT NULL)"
+            );
+        } catch (Exception e) {
+            android.util.Log.e("MailCache", "ensureSchema", e);
+        }
+    }
+
+    /** 表里是否已有该列（PRAGMA table_info 查询，避免重复 ALTER 报错） */
+    private boolean hasColumn(SQLiteDatabase db, String table, String col) {
+        Cursor c = null;
+        try {
+            c = db.rawQuery("PRAGMA table_info(" + table + ")", null);
+            int iName = c.getColumnIndex("name");
+            while (c.moveToNext()) {
+                if (col.equals(c.getString(iName))) return true;
+            }
+        } catch (Exception e) {
+            return false;
+        } finally {
+            if (c != null) c.close();
+        }
+        return false;
     }
 
     /* ------------------------- 增量同步水位（sync_state） ------------------------- */
@@ -251,6 +307,10 @@ public class MailCache extends SQLiteOpenHelper {
                 if (row != -1) written++;
             }
             db.setTransactionSuccessful();
+        } catch (Throwable t) {
+            // 表结构异常等错误只写 Log 并返回 0：写入失败会让列表空，
+            // 但绝不能把整个 App 带崩（调用方会提示「拉到 N 封但写入 0 封」）
+            android.util.Log.e("MailCache", "upsertAll failed", t);
         } finally {
             db.endTransaction();
         }
