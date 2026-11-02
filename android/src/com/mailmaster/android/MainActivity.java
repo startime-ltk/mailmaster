@@ -400,13 +400,23 @@ public class MainActivity extends Activity {
                         if (!real.isEmpty()) {
                             // 落盘本地缓存，下次离线也能看
                             MailCache cache = MailCache.getInstance(MainActivity.this);
-                            cache.upsertAll(real);
+                            int written = cache.upsertAll(real);
                             // 增量模式下 real 只是「新邮件」，必须回读全量缓存再上屏，
                             // 否则列表会被替换成仅这几封，历史邮件全部消失
-                            setList(cache.getAll());
+                            List<MailMessage> now = cache.getAll();
+                            setList(now);
+                            if (now.isEmpty()) {
+                                // 服务器明明给了邮件、本地却一封没有：这是数据层异常，
+                                // 必须说出来，否则用户只看到空白页，以为「没收到」。
+                                showFetchErrors(java.util.Collections.singletonList(
+                                        "从服务器拉到 " + real.size() + " 封，但本地只写入 " + written
+                                                + " 条且读回为空。请点「诊断信息 → 复制」把内容发给我"));
+                            }
                         } else if (cached.isEmpty() && outcome.errors.isEmpty()) {
                             setList(new ArrayList<MailMessage>());
-                            Toast.makeText(MainActivity.this, R.string.toast_fetch_empty, Toast.LENGTH_SHORT).show();
+                            Toast.makeText(MainActivity.this,
+                                    "已连接 " + store.accounts.size() + " 个账户，服务器返回 0 封邮件",
+                                    Toast.LENGTH_LONG).show();
                         } else if (!cached.isEmpty()) {
                             // 网络拉取为空（断网/无新邮件）但本地有缓存：保留缓存显示
                             Toast.makeText(MainActivity.this, R.string.toast_offline_cache, Toast.LENGTH_SHORT).show();

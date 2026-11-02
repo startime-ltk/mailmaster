@@ -286,8 +286,13 @@ public class MailService {
         inbox.open(Folder.READ_ONLY);
         UIDFolder uf = (UIDFolder) inbox;
         long uidValidity = uf.getUIDValidity();
-        MailCache.SyncState st = MailCache.getInstance(ctx).getSyncState(a.id);
-        boolean fullResync = (st == null || st.uidValidity != uidValidity);
+        MailCache cache = MailCache.getInstance(ctx);
+        MailCache.SyncState st = cache.getSyncState(a.id);
+        // 自愈条件：只要本地这个账户一封邮件都没有，就必须全量重拉。
+        // 否则「水位已前移、邮件却被清空」的账户会永远走增量分支——
+        // 只拉 maxUid 之后的新邮件，旧邮件再也回不来，界面永远是空的且没有任何报错。
+        boolean fullResync = (st == null || st.uidValidity != uidValidity
+                || cache.countByAccount(a.id) == 0);
 
         List<Message> picked = new ArrayList<>();
         boolean hasOlder;

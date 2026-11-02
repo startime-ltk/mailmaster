@@ -232,9 +232,10 @@ public class MailCache extends SQLiteOpenHelper {
      * （抓取失败或解析异常导致的空结果），而库里已有非空内容，
      * 则保留旧记录，不把一次失败固化成永久空白。
      */
-    public void upsertAll(List<MailMessage> msgs) {
-        if (msgs == null || msgs.isEmpty()) return;
+    public int upsertAll(List<MailMessage> msgs) {
+        if (msgs == null || msgs.isEmpty()) return 0;
         SQLiteDatabase db = getWritableDatabase();
+        int written = 0;
         db.beginTransaction();
         try {
             for (MailMessage m : msgs) {
@@ -245,12 +246,15 @@ public class MailCache extends SQLiteOpenHelper {
                     // 本次没抓到内容但历史有：保留历史，防止永久空白
                     continue;
                 }
-                db.insertWithOnConflict(TABLE, null, toValues(m), SQLiteDatabase.CONFLICT_REPLACE);
+                long row = db.insertWithOnConflict(TABLE, null, toValues(m),
+                        SQLiteDatabase.CONFLICT_REPLACE);
+                if (row != -1) written++;
             }
             db.setTransactionSuccessful();
         } finally {
             db.endTransaction();
         }
+        return written;
     }
 
     /** body 与 html 是否都为空 */
@@ -329,6 +333,22 @@ public class MailCache extends SQLiteOpenHelper {
             if (c != null) c.close();
         }
         return out;
+    }
+
+    /** 某账户本地缓存的邮件总数（含回收站）。用于判断「水位在、邮件没了」的错位状态。 */
+    public int countByAccount(String accountId) {
+        if (accountId == null) return 0;
+        SQLiteDatabase db = getReadableDatabase();
+        Cursor c = null;
+        try {
+            c = db.rawQuery("SELECT COUNT(*) FROM " + TABLE + " WHERE account_id=?",
+                    new String[]{accountId});
+            return (c.moveToFirst()) ? c.getInt(0) : 0;
+        } catch (Exception e) {
+            return 0;
+        } finally {
+            if (c != null) c.close();
+        }
     }
 
     /** 回收站邮件数（菜单上显示角标）。 */
